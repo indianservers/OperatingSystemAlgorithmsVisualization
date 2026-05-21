@@ -382,6 +382,64 @@
     });
   }
 
+  function initAnimatedStateTransitions() {
+    const watched = [
+      '.frame-cell', '.page-slot', '.ref-token',
+      '.request-dot', '.head-marker', '.head-label',
+      '.proc-row', '.process-state-card', '.state-chip',
+      '.mem-block', '.mem-block-row', '.disk-block',
+      '.memory-line', '.avail-cell', '.actor-state', '.actor-row',
+      '.gantt-cell', '.gantt-block'
+    ].join(',');
+
+    const mark = node => {
+      if (!(node instanceof Element)) return;
+      const targets = node.matches(watched) ? [node] : [...node.querySelectorAll(watched)];
+      targets.forEach(elm => {
+        elm.classList.remove('state-enter');
+        void elm.offsetWidth;
+        elm.classList.add('state-enter');
+      });
+    };
+
+    const previous = new WeakMap();
+    const observer = new MutationObserver(mutations => {
+      mutations.forEach(mutation => {
+        mutation.addedNodes.forEach(mark);
+        if (mutation.type === 'attributes' && mutation.target instanceof Element) {
+          const target = mutation.target;
+          if (!target.matches(watched)) return;
+          const signature = `${target.className}|${target.getAttribute('style') || ''}|${target.textContent.trim()}`;
+          if (previous.get(target) !== signature) {
+            target.classList.remove('state-changed');
+            void target.offsetWidth;
+            target.classList.add('state-changed');
+            previous.set(target, signature);
+          }
+        }
+      });
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['style']
+    });
+
+    document.querySelectorAll(watched).forEach(mark);
+
+    const localStepControls = ['stepBackBtn', 'stepFwdBtn', 'playBtn', 'runBtn'];
+    localStepControls.forEach(id => {
+      document.getElementById(id)?.addEventListener('click', () => {
+        document.querySelectorAll('.head-marker').forEach(h => {
+          h.classList.add('moving');
+          setTimeout(() => h.classList.remove('moving'), 700);
+        });
+      });
+    });
+  }
+
   function markProgress() {
     const key = `progress:${pageName()}:${activeAlgoLabel()}`;
     localStorage.setItem(key, new Date().toISOString());
@@ -430,6 +488,7 @@
     initTeacherSummary();
     initGlossary();
     initValidationHints();
+    initAnimatedStateTransitions();
     applyUrlState();
     markProgress();
     setInterval(initGlossary, 2500);
