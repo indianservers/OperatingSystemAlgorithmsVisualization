@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Page Replacement — OS Algorithms</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .frame-grid { display: flex; gap: 12px; flex-wrap: wrap; }
+    .frame-col { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .frame-head {
+      font-size: 0.7rem; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .frame-cell {
+      width: 58px; height: 52px;
+      border-radius: var(--radius-md);
+      border: 2px solid var(--line);
+      background: var(--blue-1);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      font-size: 1rem; font-weight: 800;
+      color: var(--ink);
+      transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+      position: relative;
+    }
+    .frame-cell.empty { color: var(--muted); font-size: 0.7rem; font-weight: 500; font-style: italic; }
+    .frame-cell.hit {
+      background: linear-gradient(135deg, #d4f0e3, #b4e6cc);
+      border-color: #22a06b;
+      color: #135b49;
+      box-shadow: 0 0 0 3px rgba(34,160,107,0.2);
+      transform: scale(1.05);
+    }
+    .frame-cell.fault {
+      background: linear-gradient(135deg, #fde8df, #fbbfa3);
+      border-color: #ef6c3e;
+      color: #8b2500;
+      box-shadow: 0 0 0 3px rgba(239,108,62,0.2);
+    }
+    .frame-cell.evict {
+      background: linear-gradient(135deg, #fef3c7, #fde68a);
+      border-color: #d59a26;
+      color: #5a3800;
+    }
+    .frame-cell .use-badge {
+      position: absolute; top: 3px; right: 5px;
+      font-size: 0.6rem; font-weight: 700;
+      color: var(--accent-3);
+    }
+    .frame-cell .freq-badge {
+      position: absolute; bottom: 3px; right: 5px;
+      font-size: 0.6rem; font-weight: 600;
+      color: var(--muted);
+    }
+    .ref-string-display {
+      display: flex; gap: 6px; flex-wrap: wrap;
+      padding: 12px 16px;
+      background: var(--blue-1);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+    }
+    .ref-token {
+      width: 38px; height: 38px;
+      border-radius: var(--radius-sm);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.9rem; font-weight: 700;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      color: var(--ink);
+      transition: all 0.25s;
+      flex-shrink: 0;
+      cursor: default;
+    }
+    .ref-token.done-hit { background: #d4f0e3; border-color: #22a06b; color: #135b49; }
+    .ref-token.done-fault { background: #fde8df; border-color: #ef6c3e; color: #8b2500; }
+    .ref-token.current {
+      background: var(--accent);
+      color: #fff; border-color: var(--blue-5);
+      transform: scale(1.18);
+      box-shadow: 0 4px 12px rgba(22,115,199,0.35);
+    }
+    .step-table th, .step-table td { padding: 6px 10px; font-size: 0.78rem; }
+    .step-table .hit-row td { background: #f4fdf8 !important; }
+    .step-table .fault-row td { background: #fff7f5 !important; }
+    [data-theme="dark"] .step-table .hit-row td { background: #0f2a1e !important; }
+    [data-theme="dark"] .step-table .fault-row td { background: #2a0e00 !important; }
+    .fault-indicator {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 22px; height: 22px; border-radius: 50%;
+      font-size: 0.7rem; font-weight: 800;
+    }
+    .fault-indicator.hit { background: var(--mem-light); color: var(--mem-color); }
+    .fault-indicator.fault { background: var(--disk-light); color: var(--disk-color); }
+  </style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="nav-brand" href="index.html">
+    <div class="nav-brand-mark">OS</div>
+    <div><div class="nav-brand-text">OS Algorithms</div><div class="nav-brand-sub">Indian Servers</div></div>
+  </a>
+  <div class="nav-links">
+    <a class="nav-link" href="index.html"><span class="dot" style="background:#1673c7"></span>Home</a>
+    <a class="nav-link" href="cpu-scheduling.html"><span class="dot" style="background:#1673c7"></span>CPU Scheduling</a>
+    <a class="nav-link active" href="page-replacement.html"><span class="dot" style="background:#22a06b"></span>Page Replacement</a>
+    <a class="nav-link" href="disk-scheduling.html"><span class="dot" style="background:#ef6c3e"></span>Disk Scheduling</a>
+    <a class="nav-link" href="deadlock.html"><span class="dot" style="background:#5865f2"></span>Deadlock</a>
+    <a class="nav-link" href="memory-allocation.html"><span class="dot" style="background:#0f9f9a"></span>Memory Allocation</a>
+  </div>
+  <div class="nav-actions">
+    <button class="theme-toggle" id="themeBtn">🌙</button>
+  </div>
+</nav>
+
+<div class="page-layout">
+
+  <!-- Control Panel -->
+  <aside class="control-panel">
+    <div>
+      <div class="card-header" style="margin-bottom:0">
+        <div class="card-icon" style="background:linear-gradient(135deg,#d4f0e3,#8fd6b2)">📄</div>
+        <div>
+          <div class="card-title">Page Replacement</div>
+          <div class="card-subtitle">Virtual Memory Visualization</div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title">Algorithm</div>
+      <div class="algo-grid">
+        <div class="algo-option selected" data-algo="fifo">FIFO</div>
+        <div class="algo-option" data-algo="lru">LRU</div>
+        <div class="algo-option" data-algo="lfu">LFU</div>
+        <div class="algo-option" data-algo="optimal">Optimal</div>
+        <div class="algo-option" data-algo="clock">Clock</div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Number of Frames</label>
+      <input type="range" id="frameCount" min="1" max="7" value="3" oninput="document.getElementById('frameVal').textContent=this.value">
+      <div style="display:flex; justify-content:space-between; font-size:0.78rem">
+        <span class="text-muted">1</span>
+        <span style="font-weight:700; color:var(--accent)" id="frameVal">3</span>
+        <span class="text-muted">7</span>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Page Reference String</label>
+      <input type="text" id="refInput" value="7 0 1 2 0 3 0 4 2 3 0 3 2" placeholder="e.g. 1 2 3 4 1 2 5">
+      <div class="form-hint">Space or comma separated page numbers (0–9)</div>
+    </div>
+
+    <div class="btn-group">
+      <button class="btn btn-secondary btn-sm" id="randomRefBtn">⚡ Random</button>
+    </div>
+
+    <div class="divider"></div>
+    <div class="btn-group" style="flex-wrap:nowrap">
+      <button class="btn btn-primary w-full" id="runBtn">▶ Simulate</button>
+      <button class="btn btn-secondary" id="resetBtn" title="Reset">↺</button>
+    </div>
+  </aside>
+
+  <!-- Main Panel -->
+  <main class="viz-panel">
+
+    <!-- Reference string display -->
+    <div class="card">
+      <div class="panel-title" style="margin-bottom:var(--space-3)">Page Reference String</div>
+      <div class="ref-string-display" id="refDisplay">
+        <span class="text-muted text-sm">Configure and click Simulate</span>
+      </div>
+    </div>
+
+    <!-- Frame state -->
+    <div class="card">
+      <div class="flex items-center justify-between" style="margin-bottom:var(--space-4)">
+        <div>
+          <div class="panel-title" style="margin:0">Frame State</div>
+          <div class="text-muted text-sm" id="algoLabel">First In First Out (FIFO)</div>
+        </div>
+        <div id="currentRefBadge" style="display:none">
+          <div class="badge badge-blue" id="curRefBadge">Page ?</div>
+        </div>
+      </div>
+      <div class="frame-grid" id="frameGrid">
+        <div class="text-muted text-sm">Run simulation to see frame states.</div>
+      </div>
+    </div>
+
+    <!-- Playback -->
+    <div class="playback-bar" id="playbackBar" style="display:none">
+      <button class="btn btn-secondary btn-sm btn-icon" id="stepBackBtn">⟨⟨</button>
+      <button class="btn btn-primary btn-sm" id="playBtn" style="min-width:90px">▶ Play</button>
+      <button class="btn btn-secondary btn-sm btn-icon" id="stepFwdBtn">⟩⟩</button>
+      <div class="progress-bar w-full"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+      <div class="step-counter" id="stepCounter">0 / 0</div>
+      <div class="playback-speed">
+        <span class="text-xs text-muted">Speed:</span>
+        <button class="speed-btn" data-spd="2">0.5×</button>
+        <button class="speed-btn active" data-spd="1">1×</button>
+        <button class="speed-btn" data-spd="0.5">2×</button>
+        <button class="speed-btn" data-spd="0.25">4×</button>
+      </div>
+    </div>
+
+    <!-- Metrics -->
+    <div id="metricsArea" style="display:none">
+      <div class="metrics-grid" id="metricsGrid"></div>
+    </div>
+
+    <!-- Step History Table -->
+    <div id="historyArea" style="display:none">
+      <div class="section-title" style="margin-bottom:var(--space-3)">Step History</div>
+      <div class="table-wrap">
+        <table class="step-table">
+          <thead>
+            <tr><th>#</th><th>Page</th><th>Frames After</th><th>Result</th><th>Evicted</th></tr>
+          </thead>
+          <tbody id="historyBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+// ── Theme ─────────────────────────────────────────────────
+const themeBtn = document.getElementById('themeBtn');
+const root = document.documentElement;
+const saved = localStorage.getItem('os-theme') || 'light';
+root.setAttribute('data-theme', saved);
+themeBtn.textContent = saved === 'dark' ? '☀️' : '🌙';
+themeBtn.addEventListener('click', () => {
+  const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  root.setAttribute('data-theme', next);
+  themeBtn.textContent = next === 'dark' ? '☀️' : '🌙';
+  localStorage.setItem('os-theme', next);
+});
+
+const ALGO_NAMES = {
+  fifo: 'First In First Out (FIFO)',
+  lru: 'Least Recently Used (LRU)',
+  lfu: 'Least Frequently Used (LFU)',
+  optimal: 'Optimal (Bélády\'s Algorithm)',
+  clock: 'Clock / Second Chance'
+};
+
+let currentAlgo = 'fifo';
+let simSteps = [];
+let currentStep = 0;
+let playing = false;
+let playInterval = null;
+let speedFactor = 1;
+
+// ── Algorithm Selector ─────────────────────────────────────
+document.querySelectorAll('.algo-option').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.algo-option').forEach(x => x.classList.remove('selected'));
+    el.classList.add('selected');
+    currentAlgo = el.dataset.algo;
+    document.getElementById('algoLabel').textContent = ALGO_NAMES[currentAlgo];
+  });
+});
+
+document.getElementById('randomRefBtn').addEventListener('click', () => {
+  const len = 12 + Math.floor(Math.random() * 8);
+  const refs = Array.from({ length: len }, () => Math.floor(Math.random() * 8));
+  document.getElementById('refInput').value = refs.join(' ');
+});
+
+// ── Parse Input ───────────────────────────────────────────
+function parseRefs() {
+  return document.getElementById('refInput').value
+    .split(/[\s,]+/).map(Number).filter(n => !isNaN(n) && n >= 0);
+}
+
+// ── Algorithms ────────────────────────────────────────────
+function runFIFO(refs, nFrames) {
+  const frames = new Array(nFrames).fill(-1);
+  const steps = []; let faults = 0; let ptr = 0;
+  for (let i = 0; i < refs.length; i++) {
+    const page = refs[i];
+    const hit = frames.includes(page);
+    let evicted = -1;
+    if (!hit) {
+      faults++;
+      evicted = frames[ptr];
+      frames[ptr] = page;
+      ptr = (ptr + 1) % nFrames;
+    }
+    steps.push({ page, frames: [...frames], hit, evicted, extra: {} });
+  }
+  return { steps, faults };
+}
+
+function runLRU(refs, nFrames) {
+  const frames = new Array(nFrames).fill(-1);
+  const lastUsed = {};
+  const steps = []; let faults = 0;
+  for (let i = 0; i < refs.length; i++) {
+    const page = refs[i];
+    const hit = frames.includes(page);
+    let evicted = -1;
+    if (!hit) {
+      faults++;
+      const emptySlot = frames.indexOf(-1);
+      if (emptySlot !== -1) {
+        frames[emptySlot] = page;
+      } else {
+        let lruPage = -1, lruTime = Infinity;
+        frames.forEach(f => { if (lastUsed[f] < lruTime) { lruTime = lastUsed[f]; lruPage = f; } });
+        const idx = frames.indexOf(lruPage);
+        evicted = frames[idx]; frames[idx] = page;
+      }
+    }
+    lastUsed[page] = i;
+    steps.push({ page, frames: [...frames], hit, evicted, extra: { lastUsed: { ...lastUsed } } });
+  }
+  return { steps, faults };
+}
+
+function runLFU(refs, nFrames) {
+  const frames = new Array(nFrames).fill(-1);
+  const freq = {};
+  const lastUsed = {};
+  const steps = []; let faults = 0;
+  for (let i = 0; i < refs.length; i++) {
+    const page = refs[i];
+    const hit = frames.includes(page);
+    let evicted = -1;
+    if (!hit) {
+      faults++;
+      const emptySlot = frames.indexOf(-1);
+      if (emptySlot !== -1) {
+        frames[emptySlot] = page;
+      } else {
+        let lfuPage = -1, lfuFreq = Infinity, lfuTime = Infinity;
+        frames.forEach(f => {
+          const fc = freq[f] || 0;
+          if (fc < lfuFreq || (fc === lfuFreq && lastUsed[f] < lfuTime)) {
+            lfuFreq = fc; lfuTime = lastUsed[f] || 0; lfuPage = f;
+          }
+        });
+        const idx = frames.indexOf(lfuPage);
+        evicted = frames[idx]; frames[idx] = page;
+      }
+      freq[page] = 0;
+    }
+    freq[page] = (freq[page] || 0) + 1;
+    lastUsed[page] = i;
+    steps.push({ page, frames: [...frames], hit, evicted, extra: { freq: { ...freq } } });
+  }
+  return { steps, faults };
+}
+
+function runOptimal(refs, nFrames) {
+  const frames = new Array(nFrames).fill(-1);
+  const steps = []; let faults = 0;
+  for (let i = 0; i < refs.length; i++) {
+    const page = refs[i];
+    const hit = frames.includes(page);
+    let evicted = -1;
+    if (!hit) {
+      faults++;
+      const emptySlot = frames.indexOf(-1);
+      if (emptySlot !== -1) {
+        frames[emptySlot] = page;
+      } else {
+        // Find page used farthest in future
+        let farthest = -1, farthestIdx = -1;
+        frames.forEach((f, idx) => {
+          const nextUse = refs.indexOf(f, i + 1);
+          const dist = nextUse === -1 ? Infinity : nextUse;
+          if (dist > farthest) { farthest = dist; farthestIdx = idx; }
+        });
+        evicted = frames[farthestIdx];
+        frames[farthestIdx] = page;
+      }
+    }
+    steps.push({ page, frames: [...frames], hit, evicted, extra: {} });
+  }
+  return { steps, faults };
+}
+
+function runClock(refs, nFrames) {
+  const frames = new Array(nFrames).fill(-1);
+  const useBit = new Array(nFrames).fill(0);
+  const steps = []; let faults = 0; let ptr = 0;
+  for (let i = 0; i < refs.length; i++) {
+    const page = refs[i];
+    const idx = frames.indexOf(page);
+    const hit = idx !== -1;
+    let evicted = -1;
+    if (!hit) {
+      faults++;
+      // Find victim
+      while (true) {
+        if (useBit[ptr] === 0) break;
+        useBit[ptr] = 0; ptr = (ptr + 1) % nFrames;
+      }
+      evicted = frames[ptr];
+      frames[ptr] = page;
+      useBit[ptr] = 1;
+      ptr = (ptr + 1) % nFrames;
+    } else {
+      useBit[idx] = 1;
+    }
+    steps.push({ page, frames: [...frames], hit, evicted, extra: { useBit: [...useBit], ptr } });
+  }
+  return { steps, faults };
+}
+
+function simulate() {
+  const refs = parseRefs();
+  const nFrames = parseInt(document.getElementById('frameCount').value);
+  if (!refs.length) return null;
+  switch (currentAlgo) {
+    case 'fifo': return runFIFO(refs, nFrames);
+    case 'lru': return runLRU(refs, nFrames);
+    case 'lfu': return runLFU(refs, nFrames);
+    case 'optimal': return runOptimal(refs, nFrames);
+    case 'clock': return runClock(refs, nFrames);
+  }
+}
+
+// ── Render ────────────────────────────────────────────────
+function renderRefString(refs, stepIdx) {
+  const display = document.getElementById('refDisplay');
+  display.innerHTML = refs.map((r, i) => {
+    let cls = '';
+    if (i < stepIdx) cls = simSteps[i].hit ? 'done-hit' : 'done-fault';
+    else if (i === stepIdx) cls = 'current';
+    return `<div class="ref-token ${cls}" title="${simSteps[i] ? (simSteps[i].hit ? 'HIT' : 'FAULT') : ''}">${r}</div>`;
+  }).join('');
+}
+
+function renderFrames(step, nFrames) {
+  const grid = document.getElementById('frameGrid');
+  if (!step) { grid.innerHTML = '<div class="text-muted text-sm">Run simulation to see frame states.</div>'; return; }
+
+  const html = step.frames.map((page, i) => {
+    let cls = page === -1 ? 'empty' : '';
+    if (page !== -1) {
+      // Check if this is newly loaded or was just evicted
+      if (page === step.page && !step.hit) cls = 'fault';
+      else if (page === step.page && step.hit) cls = 'hit';
+    }
+    const freq = step.extra.freq ? step.extra.freq[page] || '' : '';
+    const use = step.extra.useBit ? `<span class="use-badge">${step.extra.useBit[i]}</span>` : '';
+    const freqBadge = freq ? `<span class="freq-badge">f:${freq}</span>` : '';
+    const text = page === -1 ? 'empty' : page;
+    return `<div class="frame-col">
+      <div class="frame-head">F${i}</div>
+      <div class="frame-cell ${cls}">${text}${use}${freqBadge}</div>
+    </div>`;
+  }).join('');
+
+  grid.innerHTML = `<div style="display:flex; gap:10px">${html}</div>`;
+}
+
+function renderHistoryTable(refs, steps, upTo) {
+  const body = document.getElementById('historyBody');
+  body.innerHTML = steps.slice(0, upTo).map((s, i) => {
+    const rowCls = s.hit ? 'hit-row' : 'fault-row';
+    const framesStr = s.frames.map(f => f === -1 ? '—' : f).join(', ');
+    const indicator = s.hit
+      ? '<span class="fault-indicator hit">H</span>'
+      : '<span class="fault-indicator fault">F</span>';
+    return `<tr class="${rowCls}">
+      <td>${i + 1}</td>
+      <td><strong>${refs[i]}</strong></td>
+      <td><code>${framesStr}</code></td>
+      <td>${indicator} ${s.hit ? '<span style="color:var(--mem-color);font-weight:700">HIT</span>' : '<span style="color:var(--disk-color);font-weight:700">FAULT</span>'}</td>
+      <td>${s.evicted !== -1 ? s.evicted : '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function updateDisplay(stepIdx) {
+  const refs = parseRefs();
+  const nFrames = parseInt(document.getElementById('frameCount').value);
+  const step = stepIdx > 0 ? simSteps[stepIdx - 1] : null;
+
+  renderRefString(refs, stepIdx - 1);
+  renderFrames(step, nFrames);
+  renderHistoryTable(refs, simSteps, stepIdx);
+
+  // Update current ref badge
+  if (stepIdx > 0) {
+    document.getElementById('curRefBadge').textContent = `Page ${refs[stepIdx - 1]}`;
+    document.getElementById('currentRefBadge').style.display = '';
+  }
+
+  const pct = simSteps.length ? (stepIdx / simSteps.length * 100) : 0;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('stepCounter').textContent = `${stepIdx} / ${simSteps.length}`;
+}
+
+// ── Run ───────────────────────────────────────────────────
+document.getElementById('runBtn').addEventListener('click', () => {
+  stopPlay();
+  const result = simulate();
+  if (!result) return;
+  simSteps = result.steps;
+  const refs = parseRefs();
+  currentStep = simSteps.length;
+
+  document.getElementById('playbackBar').style.display = 'flex';
+  document.getElementById('metricsArea').style.display = 'block';
+  document.getElementById('historyArea').style.display = 'block';
+
+  // Metrics
+  const faults = result.faults;
+  const hits = simSteps.length - faults;
+  const hitRatio = (hits / simSteps.length * 100).toFixed(1);
+  document.getElementById('metricsGrid').innerHTML = `
+    <div class="metric-card"><div class="metric-value" style="color:var(--disk-color)">${faults}</div><div class="metric-label">Page Faults</div></div>
+    <div class="metric-card"><div class="metric-value" style="color:var(--mem-color)">${hits}</div><div class="metric-label">Page Hits</div></div>
+    <div class="metric-card"><div class="metric-value" style="color:var(--accent)">${hitRatio}%</div><div class="metric-label">Hit Ratio</div></div>
+    <div class="metric-card"><div class="metric-value" style="color:var(--ink)">${simSteps.length}</div><div class="metric-label">Total Refs</div></div>
+  `;
+
+  updateDisplay(currentStep);
+});
+
+// ── Playback ──────────────────────────────────────────────
+document.getElementById('stepBackBtn').addEventListener('click', () => {
+  stopPlay(); if (currentStep > 0) { currentStep--; updateDisplay(currentStep); }
+});
+document.getElementById('stepFwdBtn').addEventListener('click', () => {
+  stopPlay(); if (currentStep < simSteps.length) { currentStep++; updateDisplay(currentStep); }
+});
+
+function stopPlay() {
+  clearInterval(playInterval); playing = false;
+  document.getElementById('playBtn').textContent = '▶ Play';
+}
+document.getElementById('playBtn').addEventListener('click', () => {
+  if (playing) { stopPlay(); return; }
+  if (currentStep >= simSteps.length) currentStep = 0;
+  playing = true;
+  document.getElementById('playBtn').textContent = '⏸ Pause';
+  playInterval = setInterval(() => {
+    if (currentStep >= simSteps.length) { stopPlay(); return; }
+    currentStep++; updateDisplay(currentStep);
+  }, 700 * speedFactor);
+});
+
+document.querySelectorAll('.speed-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.speed-btn').forEach(x => x.classList.remove('active'));
+    btn.classList.add('active');
+    speedFactor = parseFloat(btn.dataset.spd);
+    if (playing) { stopPlay(); document.getElementById('playBtn').click(); }
+  });
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  stopPlay(); simSteps = []; currentStep = 0;
+  document.getElementById('refDisplay').innerHTML = '<span class="text-muted text-sm">Configure and click Simulate</span>';
+  document.getElementById('frameGrid').innerHTML = '<div class="text-muted text-sm">Run simulation to see frame states.</div>';
+  document.getElementById('playbackBar').style.display = 'none';
+  document.getElementById('metricsArea').style.display = 'none';
+  document.getElementById('historyArea').style.display = 'none';
+  document.getElementById('currentRefBadge').style.display = 'none';
+});
+</script>
+</body>
+</html>

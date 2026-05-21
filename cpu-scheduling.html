@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CPU Scheduling — OS Algorithms</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .process-row td { vertical-align: middle; }
+    .pid-badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 28px; height: 28px; border-radius: 50%;
+      font-size: 0.75rem; font-weight: 800; color: #fff;
+    }
+    .gantt-wrap { min-height: 100px; }
+    .gantt-chart { position: relative; }
+    .gantt-rows { display: flex; flex-direction: column; gap: 6px; }
+    .gantt-proc-row { display: flex; align-items: center; gap: 6px; }
+    .gantt-proc-label {
+      width: 26px; height: 26px; border-radius: 50%;
+      font-size: 0.7rem; font-weight: 800; color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .gantt-blocks { position: relative; flex: 1; height: 32px; }
+    .gantt-block {
+      position: absolute; top: 0; height: 32px;
+      border-radius: 5px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.68rem; font-weight: 700; color: rgba(255,255,255,0.9);
+      overflow: hidden;
+      border: 1px solid rgba(0,0,0,0.15);
+      transition: opacity 0.2s;
+    }
+    .gantt-block::after {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 40%;
+      background: rgba(255,255,255,0.18);
+    }
+    .gantt-block.dimmed { opacity: 0.25; }
+    .gantt-block.current { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent); z-index:2; }
+    .timeline-row {
+      position: relative; height: 20px; flex: 1;
+      border-top: 1px solid var(--line);
+      margin-left: 32px;
+    }
+    .t-tick {
+      position: absolute; top: 0; transform: translateX(-50%);
+      font-size: 0.65rem; color: var(--muted); font-weight: 600;
+      padding-top: 3px;
+    }
+    .t-tick::before {
+      content: ''; position: absolute; top: -5px; left: 50%;
+      width: 1px; height: 5px; background: var(--line);
+    }
+    .quantum-row { display: flex; align-items: center; gap: var(--space-3); }
+    .quantum-row.hidden { display: none; }
+    .proc-table-wrap { overflow-x: auto; border-radius: var(--radius-md); border: 1px solid var(--line); }
+    .proc-table-wrap table { font-size: 0.82rem; }
+    .proc-table-wrap input[type=number] {
+      width: 58px; padding: 4px 6px; text-align: center;
+      border-radius: var(--radius-sm); font-size: 0.82rem;
+    }
+    .current-time-bar {
+      font-size: 0.82rem; color: var(--muted);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .time-val { font-size: 1.1rem; font-weight: 800; color: var(--ink); min-width: 2ch; }
+    .metrics-table td:first-child { font-weight: 600; }
+    .p-color-0 { background: #1673c7; }
+    .p-color-1 { background: #d85f3f; }
+    .p-color-2 { background: #22a06b; }
+    .p-color-3 { background: #7c5bb0; }
+    .p-color-4 { background: #ef9c00; }
+    .p-color-5 { background: #0f9f9a; }
+    .p-color-6 { background: #db2777; }
+    .p-color-7 { background: #65a30d; }
+  </style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="nav-brand" href="index.html">
+    <div class="nav-brand-mark">OS</div>
+    <div><div class="nav-brand-text">OS Algorithms</div><div class="nav-brand-sub">Indian Servers</div></div>
+  </a>
+  <div class="nav-links">
+    <a class="nav-link" href="index.html"><span class="dot" style="background:#1673c7"></span>Home</a>
+    <a class="nav-link active" href="cpu-scheduling.html"><span class="dot" style="background:#1673c7"></span>CPU Scheduling</a>
+    <a class="nav-link" href="page-replacement.html"><span class="dot" style="background:#22a06b"></span>Page Replacement</a>
+    <a class="nav-link" href="disk-scheduling.html"><span class="dot" style="background:#ef6c3e"></span>Disk Scheduling</a>
+    <a class="nav-link" href="deadlock.html"><span class="dot" style="background:#5865f2"></span>Deadlock</a>
+    <a class="nav-link" href="memory-allocation.html"><span class="dot" style="background:#0f9f9a"></span>Memory Allocation</a>
+  </div>
+  <div class="nav-actions">
+    <button class="theme-toggle" id="themeBtn">🌙</button>
+  </div>
+</nav>
+
+<div class="page-layout-3">
+
+  <!-- Control Panel -->
+  <aside class="control-panel">
+    <div>
+      <div class="card-header" style="margin-bottom:0">
+        <div class="card-icon" style="background:linear-gradient(135deg,#dceeff,#9bc8ef)">🕐</div>
+        <div>
+          <div class="card-title">CPU Scheduling</div>
+          <div class="card-subtitle">Gantt Chart Visualizer</div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title">Algorithm</div>
+      <div class="algo-grid">
+        <div class="algo-option selected" data-algo="fcfs">FCFS</div>
+        <div class="algo-option" data-algo="sjf">SJF (NP)</div>
+        <div class="algo-option" data-algo="srtf">SRTF (P)</div>
+        <div class="algo-option" data-algo="rr">Round Robin</div>
+        <div class="algo-option" data-algo="priority_np">Priority NP</div>
+        <div class="algo-option" data-algo="priority_p">Priority P</div>
+      </div>
+      <div class="quantum-row hidden mt-3" id="quantumRow">
+        <label class="form-label" style="white-space:nowrap;margin:0">Time Quantum:</label>
+        <input type="number" id="quantum" value="2" min="1" max="10" style="width:70px">
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title" style="margin-bottom:8px">Processes</div>
+      <div class="proc-table-wrap">
+        <table id="procTable">
+          <thead>
+            <tr>
+              <th>PID</th><th>Arrival</th><th>Burst</th>
+              <th id="priHead" class="hidden">Priority</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="procBody"></tbody>
+        </table>
+      </div>
+      <div class="btn-group mt-3">
+        <button class="btn btn-secondary btn-sm" id="addProcBtn">+ Add</button>
+        <button class="btn btn-secondary btn-sm" id="randomBtn">⚡ Random</button>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="btn-group" style="flex-wrap:nowrap">
+      <button class="btn btn-primary w-full" id="runBtn">▶ Compute</button>
+      <button class="btn btn-secondary" id="resetBtn" title="Reset">↺</button>
+    </div>
+  </aside>
+
+  <!-- Visualization Panel -->
+  <main class="viz-panel">
+    <div class="card">
+      <div class="flex items-center justify-between" style="margin-bottom:var(--space-4)">
+        <div>
+          <div class="panel-title" style="margin:0">Gantt Chart</div>
+          <div class="text-muted text-sm" id="algoLabel">First Come First Served</div>
+        </div>
+        <div class="current-time-bar" id="timeBar" style="display:none">
+          <span>t =</span><span class="time-val" id="timeVal">0</span>
+        </div>
+      </div>
+
+      <div class="gantt-wrap" id="ganttWrap">
+        <div style="color:var(--muted); font-size:0.85rem; text-align:center; padding:24px 0">
+          Configure processes and click <strong>Compute</strong> to visualize
+        </div>
+      </div>
+
+      <div class="legend mt-3" id="ganttLegend"></div>
+    </div>
+
+    <!-- Playback controls -->
+    <div class="playback-bar" id="playbackBar" style="display:none">
+      <button class="btn btn-secondary btn-sm btn-icon" id="stepBackBtn" title="Step back">⟨⟨</button>
+      <button class="btn btn-primary btn-sm" id="playBtn" style="min-width:90px">▶ Play</button>
+      <button class="btn btn-secondary btn-sm btn-icon" id="stepFwdBtn" title="Step forward">⟩⟩</button>
+      <div class="progress-bar w-full">
+        <div class="progress-fill" id="progressFill" style="width:0%"></div>
+      </div>
+      <div class="step-counter" id="stepCounter">0 / 0</div>
+      <div class="playback-speed">
+        <span class="text-xs text-muted">Speed:</span>
+        <button class="speed-btn" data-spd="2">0.5×</button>
+        <button class="speed-btn active" data-spd="1">1×</button>
+        <button class="speed-btn" data-spd="0.5">2×</button>
+        <button class="speed-btn" data-spd="0.25">4×</button>
+      </div>
+    </div>
+
+    <!-- Metrics -->
+    <div id="metricsArea" style="display:none">
+      <div class="section-title">Performance Metrics</div>
+      <div class="metrics-grid" id="metricsGrid"></div>
+      <div class="table-wrap mt-4">
+        <table>
+          <thead>
+            <tr><th>Process</th><th>Arrival</th><th>Burst</th><th>Completion</th><th>Turnaround</th><th>Waiting</th><th>Response</th></tr>
+          </thead>
+          <tbody id="metricsBody"></tbody>
+          <tfoot id="metricsFoot" style="font-weight:700; background:var(--blue-1)"></tfoot>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- Info Panel -->
+  <aside class="info-panel">
+    <div class="section-title">Process States</div>
+    <div id="statesPanel" style="display:flex; flex-direction:column; gap:6px">
+      <div class="text-muted text-sm">Run the simulation to see process states.</div>
+    </div>
+
+    <hr>
+
+    <div class="section-title">Step Log</div>
+    <div class="step-log" id="stepLog">
+      <div class="step-entry">Ready for simulation.</div>
+    </div>
+
+    <hr>
+
+    <div class="section-title">Algorithm Info</div>
+    <div id="algoInfo" style="font-size:0.8rem; color:var(--muted); line-height:1.6">
+      <strong style="color:var(--ink)">FCFS</strong> — First Come First Served<br><br>
+      Processes are executed in the order they arrive. Simple but can cause the
+      <em>convoy effect</em> where short processes wait behind long ones.<br><br>
+      <strong>Non-preemptive.</strong> No priority consideration.
+    </div>
+  </aside>
+</div>
+
+<script>
+// ── Theme ────────────────────────────────────────────────
+const themeBtn = document.getElementById('themeBtn');
+const root = document.documentElement;
+const saved = localStorage.getItem('os-theme') || 'light';
+root.setAttribute('data-theme', saved);
+themeBtn.textContent = saved === 'dark' ? '☀️' : '🌙';
+themeBtn.addEventListener('click', () => {
+  const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  root.setAttribute('data-theme', next);
+  themeBtn.textContent = next === 'dark' ? '☀️' : '🌙';
+  localStorage.setItem('os-theme', next);
+});
+
+// ── Process Colors ────────────────────────────────────────
+const COLORS = ['#1673c7','#d85f3f','#22a06b','#7c5bb0','#ef9c00','#0f9f9a','#db2777','#65a30d'];
+const ALGO_NAMES = {
+  fcfs: 'First Come First Served (FCFS)',
+  sjf: 'Shortest Job First — Non-Preemptive (SJF)',
+  srtf: 'Shortest Remaining Time First — Preemptive (SRTF)',
+  rr: 'Round Robin (RR)',
+  priority_np: 'Priority Scheduling — Non-Preemptive',
+  priority_p: 'Priority Scheduling — Preemptive'
+};
+const ALGO_INFO = {
+  fcfs: '<strong style="color:var(--ink)">FCFS</strong> — First Come First Served<br><br>Processes execute in arrival order. Simple but causes the <em>convoy effect</em>.<br><br><strong>Non-preemptive.</strong>',
+  sjf: '<strong style="color:var(--ink)">SJF</strong> — Shortest Job First<br><br>Always picks the arrived process with shortest burst. Minimizes average waiting time (optimal for NP).<br><br><strong>Non-preemptive.</strong>',
+  srtf: '<strong style="color:var(--ink)">SRTF</strong> — Shortest Remaining Time First<br><br>Preemptive version of SJF. At each time unit picks the process with least remaining time. Optimal average waiting time.<br><br><strong>Preemptive.</strong>',
+  rr: '<strong style="color:var(--ink)">Round Robin</strong><br><br>Each process gets a fixed time quantum. Fairness guaranteed; response time depends on quantum size. Best for interactive systems.<br><br><strong>Preemptive.</strong>',
+  priority_np: '<strong style="color:var(--ink)">Priority Scheduling NP</strong><br><br>Non-preemptively selects highest-priority ready process (lower number = higher priority). Risk of <em>starvation</em> for low-priority processes.<br><br><strong>Non-preemptive.</strong>',
+  priority_p: '<strong style="color:var(--ink)">Priority Scheduling P</strong><br><br>Preempts running process if a higher-priority process arrives. More responsive but more context switches.<br><br><strong>Preemptive.</strong>'
+};
+
+// ── State ─────────────────────────────────────────────────
+let currentAlgo = 'fcfs';
+let processes = [];
+let ganttData = [];
+let steps = [];
+let currentStep = 0;
+let playInterval = null;
+let speedFactor = 1;
+let pidCounter = 1;
+
+// ── Init ──────────────────────────────────────────────────
+function init() {
+  processes = [
+    { pid: 1, arrival: 0, burst: 5, priority: 2, color: COLORS[0] },
+    { pid: 2, arrival: 1, burst: 3, priority: 1, color: COLORS[1] },
+    { pid: 3, arrival: 2, burst: 8, priority: 3, color: COLORS[2] },
+    { pid: 4, arrival: 3, burst: 2, priority: 1, color: COLORS[3] },
+  ];
+  pidCounter = 5;
+  renderTable();
+}
+
+function renderTable() {
+  const body = document.getElementById('procBody');
+  const showPri = currentAlgo === 'priority_np' || currentAlgo === 'priority_p';
+  document.getElementById('priHead').classList.toggle('hidden', !showPri);
+  body.innerHTML = processes.map((p, i) => `
+    <tr class="process-row" data-idx="${i}">
+      <td><span class="pid-badge p-color-${i % 8}">P${p.pid}</span></td>
+      <td><input type="number" value="${p.arrival}" min="0" max="50" onchange="updateProc(${i},'arrival',this.value)"></td>
+      <td><input type="number" value="${p.burst}" min="1" max="30" onchange="updateProc(${i},'burst',this.value)"></td>
+      <td class="${showPri ? '' : 'hidden'}"><input type="number" value="${p.priority}" min="1" max="10" onchange="updateProc(${i},'priority',this.value)"></td>
+      <td><button class="btn btn-ghost btn-icon btn-sm" onclick="removeProc(${i})">✕</button></td>
+    </tr>
+  `).join('');
+}
+
+function updateProc(i, field, val) {
+  processes[i][field] = parseInt(val) || 0;
+}
+function removeProc(i) {
+  if (processes.length <= 1) return;
+  processes.splice(i, 1);
+  renderTable();
+}
+
+document.getElementById('addProcBtn').addEventListener('click', () => {
+  if (processes.length >= 8) return;
+  processes.push({ pid: pidCounter++, arrival: 0, burst: 4, priority: 2, color: COLORS[processes.length % 8] });
+  renderTable();
+});
+
+document.getElementById('randomBtn').addEventListener('click', () => {
+  processes = [];
+  pidCounter = 1;
+  const n = 4 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < n; i++) {
+    processes.push({
+      pid: pidCounter++,
+      arrival: Math.floor(Math.random() * 8),
+      burst: 1 + Math.floor(Math.random() * 9),
+      priority: 1 + Math.floor(Math.random() * 5),
+      color: COLORS[i % 8]
+    });
+  }
+  renderTable();
+});
+
+// ── Algorithm Selection ───────────────────────────────────
+document.querySelectorAll('.algo-option').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.algo-option').forEach(x => x.classList.remove('selected'));
+    el.classList.add('selected');
+    currentAlgo = el.dataset.algo;
+    document.getElementById('quantumRow').classList.toggle('hidden', currentAlgo !== 'rr');
+    document.getElementById('algoLabel').textContent = ALGO_NAMES[currentAlgo];
+    document.getElementById('algoInfo').innerHTML = ALGO_INFO[currentAlgo];
+    renderTable();
+  });
+});
+
+// ── Algorithms ────────────────────────────────────────────
+function computeFCFS(procs) {
+  const sorted = [...procs].sort((a, b) => a.arrival - b.arrival || a.pid - b.pid);
+  const gantt = []; let t = 0;
+  for (const p of sorted) {
+    if (t < p.arrival) gantt.push({ pid: -1, start: t, end: p.arrival });
+    gantt.push({ pid: p.pid, start: Math.max(t, p.arrival), end: Math.max(t, p.arrival) + p.burst });
+    t = gantt[gantt.length - 1].end;
+  }
+  return gantt;
+}
+
+function computeSJF(procs) {
+  const all = procs.map(p => ({ ...p }));
+  const gantt = []; let t = 0; const done = new Set();
+  while (done.size < all.length) {
+    const avail = all.filter(p => p.arrival <= t && !done.has(p.pid));
+    if (!avail.length) { t++; continue; }
+    avail.sort((a, b) => a.burst - b.burst || a.arrival - b.arrival || a.pid - b.pid);
+    const p = avail[0];
+    if (t < p.arrival) gantt.push({ pid: -1, start: t, end: p.arrival });
+    gantt.push({ pid: p.pid, start: t, end: t + p.burst });
+    t += p.burst; done.add(p.pid);
+  }
+  return gantt;
+}
+
+function computeSRTF(procs) {
+  const all = procs.map(p => ({ ...p, rem: p.burst, resp: -1 }));
+  const n = all.length; let done = 0; let t = 0;
+  let cur = null; let segStart = 0; const gantt = [];
+  while (done < n) {
+    const avail = all.filter(p => p.arrival <= t && p.rem > 0);
+    if (!avail.length) { if (cur) { gantt.push({ pid: cur.pid, start: segStart, end: t }); cur = null; } t++; continue; }
+    avail.sort((a, b) => a.rem - b.rem || a.arrival - b.arrival || a.pid - b.pid);
+    const next = avail[0];
+    if (!cur || cur.pid !== next.pid) {
+      if (cur) gantt.push({ pid: cur.pid, start: segStart, end: t });
+      segStart = t; cur = next;
+    }
+    next.rem--; t++;
+    if (next.rem === 0) { gantt.push({ pid: next.pid, start: segStart, end: t }); cur = null; segStart = t; done++; }
+  }
+  return gantt;
+}
+
+function computeRR(procs, q) {
+  const all = procs.map(p => ({ ...p, rem: p.burst })).sort((a, b) => a.arrival - b.arrival);
+  const gantt = []; let t = 0; const queue = []; let idx = 0;
+  while (idx < all.length && all[idx].arrival <= t) { queue.push(all[idx++]); }
+  while (queue.length || idx < all.length) {
+    if (!queue.length) { t = all[idx].arrival; queue.push(all[idx++]); }
+    const p = queue.shift();
+    const exec = Math.min(q, p.rem);
+    gantt.push({ pid: p.pid, start: t, end: t + exec });
+    t += exec; p.rem -= exec;
+    while (idx < all.length && all[idx].arrival <= t) { queue.push(all[idx++]); }
+    if (p.rem > 0) queue.push(p);
+  }
+  return gantt;
+}
+
+function computePriorityNP(procs) {
+  const all = procs.map(p => ({ ...p }));
+  const gantt = []; let t = 0; const done = new Set();
+  while (done.size < all.length) {
+    const avail = all.filter(p => p.arrival <= t && !done.has(p.pid));
+    if (!avail.length) { t++; continue; }
+    avail.sort((a, b) => a.priority - b.priority || a.arrival - b.arrival || a.pid - b.pid);
+    const p = avail[0];
+    gantt.push({ pid: p.pid, start: t, end: t + p.burst });
+    t += p.burst; done.add(p.pid);
+  }
+  return gantt;
+}
+
+function computePriorityP(procs) {
+  const all = procs.map(p => ({ ...p, rem: p.burst }));
+  const n = all.length; let done = 0; let t = 0;
+  let cur = null; let segStart = 0; const gantt = [];
+  while (done < n) {
+    const avail = all.filter(p => p.arrival <= t && p.rem > 0);
+    if (!avail.length) { if (cur) { gantt.push({ pid: cur.pid, start: segStart, end: t }); cur = null; } t++; continue; }
+    avail.sort((a, b) => a.priority - b.priority || a.arrival - b.arrival || a.pid - b.pid);
+    const next = avail[0];
+    if (!cur || cur.pid !== next.pid) {
+      if (cur) gantt.push({ pid: cur.pid, start: segStart, end: t });
+      segStart = t; cur = next;
+    }
+    next.rem--; t++;
+    if (next.rem === 0) { gantt.push({ pid: next.pid, start: segStart, end: t }); cur = null; segStart = t; done++; }
+  }
+  return gantt;
+}
+
+function computeGantt() {
+  const q = parseInt(document.getElementById('quantum').value) || 2;
+  const cleaned = processes.filter(p => p.burst > 0);
+  switch (currentAlgo) {
+    case 'fcfs': return computeFCFS(cleaned);
+    case 'sjf': return computeSJF(cleaned);
+    case 'srtf': return computeSRTF(cleaned);
+    case 'rr': return computeRR(cleaned, q);
+    case 'priority_np': return computePriorityNP(cleaned);
+    case 'priority_p': return computePriorityP(cleaned);
+  }
+  return [];
+}
+
+// ── Metrics ───────────────────────────────────────────────
+function computeMetrics(gantt, procs) {
+  const map = {};
+  procs.forEach(p => { map[p.pid] = { ...p, completion: 0, response: -1, firstStart: -1 }; });
+  gantt.forEach(seg => {
+    if (seg.pid < 0) return;
+    const p = map[seg.pid];
+    if (!p) return;
+    if (p.firstStart < 0) p.firstStart = seg.start;
+    p.completion = Math.max(p.completion, seg.end);
+  });
+  return Object.values(map).map(p => ({
+    ...p,
+    turnaround: p.completion - p.arrival,
+    waiting: p.completion - p.arrival - p.burst,
+    response: p.firstStart - p.arrival
+  }));
+}
+
+// ── Build Steps ───────────────────────────────────────────
+function buildSteps(gantt) {
+  // Each step = show up to that gantt segment
+  const s = [];
+  for (let i = 1; i <= gantt.length; i++) {
+    s.push({ visibleCount: i, time: gantt[i-1].end });
+  }
+  return s;
+}
+
+// ── Render Gantt ──────────────────────────────────────────
+function renderGantt(gantt, visibleCount) {
+  const wrap = document.getElementById('ganttWrap');
+  if (!gantt.length) { wrap.innerHTML = '<div style="color:var(--muted);text-align:center;padding:24px">No data</div>'; return; }
+
+  const maxT = gantt[gantt.length - 1].end;
+  const scale = Math.min(1, (wrap.clientWidth - 60) / (maxT * 28));
+  const blockW = Math.max(18, 28 * scale);
+
+  // Per-process rows
+  const pidMap = {};
+  processes.forEach((p, i) => { pidMap[p.pid] = { color: p.color, idx: i }; });
+
+  // Build row per process
+  const rowsHtml = processes.map((p, i) => {
+    const segs = gantt.filter(s => s.pid === p.pid);
+    const blocks = segs.slice(0, visibleCount).map(s => {
+      const left = s.start * blockW;
+      const width = (s.end - s.start) * blockW;
+      const isLast = gantt.indexOf(s) === visibleCount - 1;
+      return `<div class="gantt-block ${isLast ? 'current' : ''}"
+        style="left:${left}px; width:${width}px; background:${p.color}"
+        title="P${p.pid}: t=${s.start}–${s.end}">
+        ${width > 26 ? `<span style="font-size:0.68rem;font-weight:700">${s.end - s.start}</span>` : ''}
+      </div>`;
+    }).join('');
+    return `<div class="gantt-proc-row">
+      <div class="gantt-proc-label" style="background:${p.color}">P${p.pid}</div>
+      <div class="gantt-blocks" style="width:${maxT * blockW}px">${blocks}</div>
+    </div>`;
+  }).join('');
+
+  // Ticks
+  const tickStep = maxT <= 20 ? 1 : maxT <= 50 ? 5 : 10;
+  let ticks = '';
+  for (let t = 0; t <= maxT; t += tickStep) {
+    ticks += `<div class="t-tick" style="left:${t * blockW}px">${t}</div>`;
+  }
+  if (maxT % tickStep !== 0) ticks += `<div class="t-tick" style="left:${maxT * blockW}px">${maxT}</div>`;
+
+  wrap.innerHTML = `
+    <div class="gantt-rows" style="overflow-x:auto; padding-bottom:4px">
+      ${rowsHtml}
+      <div style="display:flex; gap:6px; margin-top:4px">
+        <div style="width:32px; flex-shrink:0"></div>
+        <div class="timeline-row" style="width:${maxT * blockW}px">${ticks}</div>
+      </div>
+    </div>
+  `;
+
+  // Legend
+  const leg = document.getElementById('ganttLegend');
+  leg.innerHTML = processes.map(p =>
+    `<div class="legend-item"><div class="legend-swatch" style="background:${p.color}"></div>P${p.pid}</div>`
+  ).join('');
+}
+
+// ── Run ───────────────────────────────────────────────────
+document.getElementById('runBtn').addEventListener('click', run);
+function run() {
+  stopPlay();
+  ganttData = computeGantt();
+  if (!ganttData.length) return;
+  steps = buildSteps(ganttData);
+  currentStep = steps.length;
+
+  renderGantt(ganttData, currentStep);
+  showMetrics();
+  document.getElementById('playbackBar').style.display = 'flex';
+  document.getElementById('metricsArea').style.display = 'block';
+  document.getElementById('timeBar').style.display = 'flex';
+  updatePlayback();
+  buildStepLog();
+  updateStatePanel(currentStep);
+}
+
+function showMetrics() {
+  const metrics = computeMetrics(ganttData, processes);
+  const grid = document.getElementById('metricsGrid');
+  const avgWT = (metrics.reduce((s, m) => s + m.waiting, 0) / metrics.length).toFixed(2);
+  const avgTAT = (metrics.reduce((s, m) => s + m.turnaround, 0) / metrics.length).toFixed(2);
+  const avgRT = (metrics.reduce((s, m) => s + m.response, 0) / metrics.length).toFixed(2);
+  const totalTime = ganttData[ganttData.length - 1].end;
+  const cpuBusy = ganttData.filter(s => s.pid >= 0).reduce((s, g) => s + g.end - g.start, 0);
+  const util = ((cpuBusy / totalTime) * 100).toFixed(1);
+
+  grid.innerHTML = `
+    <div class="metric-card"><div class="metric-value" style="color:var(--cpu-color)">${avgWT}</div><div class="metric-label">Avg Wait (ms)</div></div>
+    <div class="metric-card"><div class="metric-value" style="color:var(--mem-color)">${avgTAT}</div><div class="metric-label">Avg Turnaround</div></div>
+    <div class="metric-card"><div class="metric-value" style="color:var(--disk-color)">${avgRT}</div><div class="metric-label">Avg Response</div></div>
+    <div class="metric-card"><div class="metric-value" style="color:var(--deadlock-color)">${util}%</div><div class="metric-label">CPU Utilization</div></div>
+  `;
+
+  const body = document.getElementById('metricsBody');
+  body.innerHTML = metrics.map(m => `
+    <tr>
+      <td><span class="pid-badge" style="background:${m.color}">P${m.pid}</span></td>
+      <td>${m.arrival}</td><td>${m.burst}</td>
+      <td>${m.completion}</td>
+      <td><strong>${m.turnaround}</strong></td>
+      <td><strong style="color:var(--cpu-color)">${m.waiting}</strong></td>
+      <td>${m.response}</td>
+    </tr>
+  `).join('');
+
+  const foot = document.getElementById('metricsFoot');
+  const total = { tat: metrics.reduce((s, m) => s + m.turnaround, 0), wt: metrics.reduce((s, m) => s + m.waiting, 0) };
+  foot.innerHTML = `<tr><td colspan="4" style="color:var(--muted)">Average</td><td>${(total.tat/metrics.length).toFixed(2)}</td><td>${(total.wt/metrics.length).toFixed(2)}</td><td>—</td></tr>`;
+}
+
+// ── Playback ──────────────────────────────────────────────
+function updatePlayback() {
+  const cs = currentStep;
+  document.getElementById('stepCounter').textContent = `${cs} / ${steps.length}`;
+  const pct = steps.length ? (cs / steps.length * 100) : 0;
+  document.getElementById('progressFill').style.width = pct + '%';
+  const t = steps.length && cs > 0 ? steps[cs - 1].time : 0;
+  document.getElementById('timeVal').textContent = t;
+  renderGantt(ganttData, cs);
+  updateStatePanel(cs);
+  if (cs > 0 && cs <= steps.length) scrollLogToStep(cs - 1);
+}
+
+function buildStepLog() {
+  const log = document.getElementById('stepLog');
+  log.innerHTML = ganttData.map((seg, i) => {
+    const label = seg.pid < 0 ? 'CPU idle' : `P${seg.pid} runs`;
+    const cls = seg.pid < 0 ? 'warning' : 'success';
+    return `<div class="step-entry ${cls}" id="logEntry${i}">${label}: t=${seg.start} → t=${seg.end} <span style="color:var(--muted)">(${seg.end - seg.start} unit${seg.end - seg.start !== 1 ? 's' : ''})</span></div>`;
+  }).join('');
+}
+function scrollLogToStep(i) {
+  const el = document.getElementById(`logEntry${i}`);
+  if (el) { document.querySelectorAll('.step-entry').forEach(x => x.classList.remove('current')); el.classList.add('current'); el.scrollIntoView({ block: 'nearest' }); }
+}
+
+function updateStatePanel(cs) {
+  const panel = document.getElementById('statesPanel');
+  const metrics = computeMetrics(ganttData.slice(0, cs), processes);
+  const curTime = cs > 0 ? steps[cs - 1].time : 0;
+  const runningPid = cs > 0 && ganttData[cs - 1].pid >= 0 ? ganttData[cs - 1].pid : -1;
+  panel.innerHTML = processes.map(p => {
+    const m = metrics.find(x => x.pid === p.pid);
+    let state = 'not arrived';
+    if (p.arrival > curTime) state = 'not arrived';
+    else if (m && m.completion <= curTime) state = 'done';
+    else if (p.pid === runningPid) state = 'running';
+    else state = 'ready';
+    const colors = { 'running': 'running', 'ready': 'ready', 'done': 'done', 'not arrived': 'done' };
+    const labels = { 'running': '▶ Running', 'ready': '⏳ Ready', 'done': '✓ Done', 'not arrived': '○ Waiting' };
+    return `<div style="display:flex; align-items:center; justify-content:space-between; font-size:0.82rem; padding:5px 8px; border-radius:6px; background:var(--blue-1); border:1px solid var(--line)">
+      <span style="display:flex; align-items:center; gap:6px"><span class="state-dot ${colors[state]}"></span><strong>P${p.pid}</strong></span>
+      <span style="color:var(--muted)">${labels[state]}</span>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('stepBackBtn').addEventListener('click', () => {
+  stopPlay(); if (currentStep > 0) { currentStep--; updatePlayback(); }
+});
+document.getElementById('stepFwdBtn').addEventListener('click', () => {
+  stopPlay(); if (currentStep < steps.length) { currentStep++; updatePlayback(); }
+});
+
+let playing = false;
+function stopPlay() {
+  clearInterval(playInterval); playing = false;
+  document.getElementById('playBtn').textContent = '▶ Play';
+}
+document.getElementById('playBtn').addEventListener('click', () => {
+  if (playing) { stopPlay(); return; }
+  if (currentStep >= steps.length) currentStep = 0;
+  playing = true;
+  document.getElementById('playBtn').textContent = '⏸ Pause';
+  playInterval = setInterval(() => {
+    if (currentStep >= steps.length) { stopPlay(); return; }
+    currentStep++; updatePlayback();
+  }, 600 * speedFactor);
+});
+
+document.querySelectorAll('.speed-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.speed-btn').forEach(x => x.classList.remove('active'));
+    btn.classList.add('active');
+    speedFactor = parseFloat(btn.dataset.spd);
+    if (playing) { stopPlay(); document.getElementById('playBtn').click(); }
+  });
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  stopPlay(); currentStep = 0; ganttData = []; steps = [];
+  document.getElementById('ganttWrap').innerHTML = '<div style="color:var(--muted);font-size:0.85rem;text-align:center;padding:24px 0">Configure processes and click <strong>Compute</strong> to visualize</div>';
+  document.getElementById('playbackBar').style.display = 'none';
+  document.getElementById('metricsArea').style.display = 'none';
+  document.getElementById('timeBar').style.display = 'none';
+  document.getElementById('ganttLegend').innerHTML = '';
+  document.getElementById('statesPanel').innerHTML = '<div class="text-muted text-sm">Run the simulation to see process states.</div>';
+  document.getElementById('stepLog').innerHTML = '<div class="step-entry">Ready for simulation.</div>';
+});
+
+init();
+</script>
+</body>
+</html>

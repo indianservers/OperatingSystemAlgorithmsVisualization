@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OS Algorithm Visualizer — Indian Servers</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="nav-brand" href="index.html">
+    <div class="nav-brand-mark">OS</div>
+    <div>
+      <div class="nav-brand-text">OS Algorithms</div>
+      <div class="nav-brand-sub">Indian Servers</div>
+    </div>
+  </a>
+  <div class="nav-links">
+    <a class="nav-link active" href="index.html"><span class="dot" style="background:#1673c7"></span>Home</a>
+    <a class="nav-link" href="cpu-scheduling.html"><span class="dot" style="background:#1673c7"></span>CPU Scheduling</a>
+    <a class="nav-link" href="page-replacement.html"><span class="dot" style="background:#22a06b"></span>Page Replacement</a>
+    <a class="nav-link" href="disk-scheduling.html"><span class="dot" style="background:#ef6c3e"></span>Disk Scheduling</a>
+    <a class="nav-link" href="deadlock.html"><span class="dot" style="background:#5865f2"></span>Deadlock</a>
+    <a class="nav-link" href="memory-allocation.html"><span class="dot" style="background:#0f9f9a"></span>Memory Allocation</a>
+  </div>
+  <div class="nav-actions">
+    <button class="theme-toggle" id="themeBtn" title="Toggle theme">🌙</button>
+  </div>
+</nav>
+
+<div class="hero">
+  <div class="hero-content">
+    <div class="hero-badge">⚡ Interactive Browser-Based Visualizations</div>
+    <h1 class="hero-title">Operating System<br>Algorithms, Visualized</h1>
+    <p class="hero-sub">
+      Step through CPU scheduling, memory management, disk I/O, and concurrency algorithms with
+      animated, interactive visualizations. Built for learning and teaching OS concepts.
+    </p>
+  </div>
+</div>
+
+<div class="algo-cards-grid">
+
+  <a href="cpu-scheduling.html" class="algo-card fade-in" style="--card-accent: #1673c7">
+    <div class="algo-card-icon" style="background: linear-gradient(135deg, #dceeff, #9bc8ef)">🕐</div>
+    <div class="algo-card-title">CPU Scheduling</div>
+    <div class="algo-card-desc">
+      Visualize how the OS dispatches processes on the CPU. Watch animated Gantt charts and compare
+      waiting time, turnaround time, and response time across algorithms.
+    </div>
+    <div class="algo-card-tags">
+      <span class="tag" style="background:#dceeff; color:#1a4a82; border-color:#9bc8ef">FCFS</span>
+      <span class="tag" style="background:#dceeff; color:#1a4a82; border-color:#9bc8ef">SJF</span>
+      <span class="tag" style="background:#dceeff; color:#1a4a82; border-color:#9bc8ef">SRTF</span>
+      <span class="tag" style="background:#dceeff; color:#1a4a82; border-color:#9bc8ef">Round Robin</span>
+      <span class="tag" style="background:#dceeff; color:#1a4a82; border-color:#9bc8ef">Priority</span>
+    </div>
+  </a>
+
+  <a href="page-replacement.html" class="algo-card fade-in" style="--card-accent: #22a06b; animation-delay: 0.05s">
+    <div class="algo-card-icon" style="background: linear-gradient(135deg, #d4f0e3, #8fd6b2)">📄</div>
+    <div class="algo-card-title">Page Replacement</div>
+    <div class="algo-card-desc">
+      See how virtual memory page frames are managed. Track page faults and hits step-by-step as
+      each page reference is processed through your chosen replacement policy.
+    </div>
+    <div class="algo-card-tags">
+      <span class="tag" style="background:#d4f0e3; color:#135b49; border-color:#8fd6b2">FIFO</span>
+      <span class="tag" style="background:#d4f0e3; color:#135b49; border-color:#8fd6b2">LRU</span>
+      <span class="tag" style="background:#d4f0e3; color:#135b49; border-color:#8fd6b2">LFU</span>
+      <span class="tag" style="background:#d4f0e3; color:#135b49; border-color:#8fd6b2">Optimal</span>
+      <span class="tag" style="background:#d4f0e3; color:#135b49; border-color:#8fd6b2">Clock</span>
+    </div>
+  </a>
+
+  <a href="disk-scheduling.html" class="algo-card fade-in" style="--card-accent: #ef6c3e; animation-delay: 0.1s">
+    <div class="algo-card-icon" style="background: linear-gradient(135deg, #fde8df, #f9baa0)">💿</div>
+    <div class="algo-card-title">Disk Scheduling</div>
+    <div class="algo-card-desc">
+      Animate the disk read/write head seeking across cylinders. Compare total seek distances and
+      the characteristic zigzag patterns of each disk scheduling algorithm.
+    </div>
+    <div class="algo-card-tags">
+      <span class="tag" style="background:#fde8df; color:#8b2500; border-color:#f9baa0">FCFS</span>
+      <span class="tag" style="background:#fde8df; color:#8b2500; border-color:#f9baa0">SSTF</span>
+      <span class="tag" style="background:#fde8df; color:#8b2500; border-color:#f9baa0">SCAN</span>
+      <span class="tag" style="background:#fde8df; color:#8b2500; border-color:#f9baa0">C-SCAN</span>
+      <span class="tag" style="background:#fde8df; color:#8b2500; border-color:#f9baa0">LOOK</span>
+      <span class="tag" style="background:#fde8df; color:#8b2500; border-color:#f9baa0">C-LOOK</span>
+    </div>
+  </a>
+
+  <a href="deadlock.html" class="algo-card fade-in" style="--card-accent: #5865f2; animation-delay: 0.15s">
+    <div class="algo-card-icon" style="background: linear-gradient(135deg, #e0e2fd, #b5b9fb)">🔒</div>
+    <div class="algo-card-title">Deadlock — Banker's Algorithm</div>
+    <div class="algo-card-desc">
+      Input resource allocation and maximum demand matrices, then watch the safety algorithm
+      find a safe execution sequence or identify an unsafe (deadlock-prone) state.
+    </div>
+    <div class="algo-card-tags">
+      <span class="tag" style="background:#e0e2fd; color:#2d3191; border-color:#b5b9fb">Safety Algorithm</span>
+      <span class="tag" style="background:#e0e2fd; color:#2d3191; border-color:#b5b9fb">Need Matrix</span>
+      <span class="tag" style="background:#e0e2fd; color:#2d3191; border-color:#b5b9fb">Safe Sequence</span>
+    </div>
+  </a>
+
+  <a href="memory-allocation.html" class="algo-card fade-in" style="--card-accent: #0f9f9a; animation-delay: 0.2s">
+    <div class="algo-card-icon" style="background: linear-gradient(135deg, #ccf0ef, #88d8d6)">🗃️</div>
+    <div class="algo-card-title">Memory Allocation</div>
+    <div class="algo-card-desc">
+      Explore how contiguous memory is partitioned and assigned to processes. Visualize internal
+      vs external fragmentation and compare fit strategies side-by-side on a memory map.
+    </div>
+    <div class="algo-card-tags">
+      <span class="tag" style="background:#ccf0ef; color:#0a5c59; border-color:#88d8d6">First Fit</span>
+      <span class="tag" style="background:#ccf0ef; color:#0a5c59; border-color:#88d8d6">Best Fit</span>
+      <span class="tag" style="background:#ccf0ef; color:#0a5c59; border-color:#88d8d6">Worst Fit</span>
+      <span class="tag" style="background:#ccf0ef; color:#0a5c59; border-color:#88d8d6">Next Fit</span>
+    </div>
+  </a>
+
+</div>
+
+<footer style="padding: 24px 32px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.8rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+  <span>OS Algorithm Visualizer · Indian Servers</span>
+  <span>Browser-based · No dependencies · Offline capable</span>
+</footer>
+
+<script>
+const btn = document.getElementById('themeBtn');
+const root = document.documentElement;
+const saved = localStorage.getItem('os-theme') || 'light';
+root.setAttribute('data-theme', saved);
+btn.textContent = saved === 'dark' ? '☀️' : '🌙';
+btn.addEventListener('click', () => {
+  const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  root.setAttribute('data-theme', next);
+  btn.textContent = next === 'dark' ? '☀️' : '🌙';
+  localStorage.setItem('os-theme', next);
+});
+</script>
+</body>
+</html>
