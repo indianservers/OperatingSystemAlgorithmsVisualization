@@ -1,56 +1,192 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="light">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Disk Scheduling — OS Algorithms</title>
-  <link rel="stylesheet" href="css/style.css">
-  <style>
-    .disk-svg-container {
-      background: var(--blue-1);
-      border: 1px solid var(--line);
-      border-radius: var(--radius-lg);
-      padding: var(--space-4);
-      overflow: hidden;
-    }
-    .disk-svg { width: 100%; display: block; overflow: visible; }
-    .seek-sequence {
-      display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
-      padding: 12px 16px;
-      background: var(--blue-1);
-      border: 1px solid var(--line);
-      border-radius: var(--radius-lg);
-    }
-    .seek-step {
-      display: flex; align-items: center; gap: 4px;
-      font-size: 0.84rem; font-weight: 700;
-    }
-    .seek-step .num {
-      padding: 4px 10px; border-radius: 20px;
-      background: var(--panel); border: 1px solid var(--line);
-      color: var(--ink);
-      transition: all 0.3s;
-    }
-    .seek-step .num.current {
-      background: var(--accent); color: #fff; border-color: var(--blue-5);
-      transform: scale(1.1);
-    }
-    .seek-step .num.done { background: var(--cpu-light); color: var(--blue-5); border-color: var(--blue-3); }
-    .seek-step .arrow { color: var(--muted); font-size: 0.7rem; }
-    .cylinder-ruler {
-      display: flex; gap: 0; align-items: center;
-      font-size: 0.7rem; color: var(--muted); font-weight: 600;
-      margin-top: 4px;
-    }
-    .requests-input-grid { display: flex; flex-wrap: wrap; gap: 6px; }
-    .req-input-item {
-      display: flex; align-items: center; gap: 4px;
-      background: var(--blue-1); border: 1px solid var(--line);
-      border-radius: var(--radius-sm); padding: 4px 8px;
-    }
-    .req-input-item input { width: 52px; text-align: center; }
-    .req-label { font-size: 0.7rem; color: var(--muted); font-weight: 600; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Disk Scheduling — OS Algorithms</title>
+<link rel="stylesheet" href="css/style.css">
+<style>
+/* ─── Layout ──────────────────────────────────────── */
+.disk-layout {
+  display: grid;
+  grid-template-columns: 300px minmax(0,1fr) 260px;
+  min-height: calc(100vh - 108px);
+}
+.toolbar {
+  background: linear-gradient(180deg,#f8fbff,#eef6ff);
+  border-bottom: 1px solid var(--line);
+  padding: 8px 20px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+[data-theme=dark] .toolbar { background: linear-gradient(180deg,#172434,#0f1c2e); }
+.mode-toggle {
+  padding: 5px 12px; border-radius: 20px;
+  font-size: .75rem; font-weight: 700;
+  border: 1px solid var(--line); cursor: pointer;
+  background: var(--panel); color: var(--muted); transition: all .15s;
+}
+.mode-toggle.active { background: var(--disk-color); color: #fff; border-color: #b84520; }
+.toolbar-sep { width:1px; height:24px; background:var(--line); margin:0 4px; }
+.algo-tab {
+  padding: 6px 11px; border-radius: var(--radius-sm);
+  font-size: .78rem; font-weight: 600;
+  border: 1px solid var(--line); cursor: pointer;
+  background: var(--blue-1); color: var(--muted); transition: all .15s;
+}
+.algo-tab.active { background: var(--disk-color); color: #fff; border-color: #b84520; }
+.algo-tab:hover { background: var(--disk-light); color: #8b2500; }
+
+/* ─── Disk Track ──────────────────────────────────── */
+.disk-track-wrap {
+  background: var(--blue-1); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); padding: 18px 20px;
+  overflow: hidden;
+}
+.disk-track-container {
+  position: relative; height: 80px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.track-gradient {
+  position: absolute; inset: 0;
+  background: linear-gradient(to right, #f0f8ff, #e8f4f8, #f0f8ff);
+}
+.track-rail {
+  position: absolute; top: 50%; left: 20px; right: 20px;
+  height: 4px; background: var(--line); border-radius: 2px;
+  transform: translateY(-50%);
+}
+.track-rail-done {
+  position: absolute; top: 50%; left: 20px;
+  height: 4px; background: var(--disk-color); border-radius: 2px;
+  transform: translateY(-50%);
+  transition: width .4s ease;
+}
+.request-dot {
+  position: absolute; top: 50%; width: 12px; height: 12px;
+  border-radius: 50%; transform: translate(-50%,-50%);
+  transition: all .3s;
+  border: 2px solid #fff;
+  cursor: pointer;
+  z-index: 2;
+}
+.request-dot.pending { background: var(--accent); }
+.request-dot.served { background: var(--mem-color); opacity: .4; }
+.request-dot.current {
+  background: var(--disk-color);
+  box-shadow: 0 0 0 4px rgba(239,108,62,.3);
+  transform: translate(-50%,-50%) scale(1.4);
+  z-index: 4;
+}
+.request-dot.future { background: var(--muted); opacity: .5; }
+.head-marker {
+  position: absolute; top: 0; bottom: 0;
+  width: 3px; background: var(--disk-color);
+  transform: translateX(-50%);
+  transition: left .4s cubic-bezier(.34,1.56,.64,1);
+  z-index: 5;
+}
+.head-marker::before {
+  content: ''; position: absolute; top: 6px; left: -7px;
+  border: 8px solid transparent;
+  border-top-color: var(--disk-color);
+  transform: translateY(-100%);
+}
+.head-label {
+  position: absolute; top: 4px; transform: translateX(-50%);
+  font-size: .65rem; font-weight: 800; color: var(--disk-color);
+  white-space: nowrap;
+  transition: left .4s cubic-bezier(.34,1.56,.64,1);
+  z-index: 6;
+}
+.cylinder-axis {
+  position: absolute; bottom: 6px; left: 20px; right: 20px;
+  display: flex; justify-content: space-between;
+  font-size: .62rem; color: var(--muted); font-weight: 600;
+}
+.direction-arrow {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  font-size: 1.1rem; font-weight: 900;
+  transition: all .3s;
+  z-index: 5;
+}
+
+/* ─── Movement Chart (SVG) ────────────────────────── */
+.movement-chart-wrap {
+  background: var(--blue-1); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); padding: 14px;
+}
+
+/* ─── Service Table ───────────────────────────────── */
+.service-table { font-size: .8rem; }
+.service-table td { padding: 5px 10px; }
+.service-row.current td { background: var(--disk-light) !important; font-weight: 700; }
+.service-row.served td { background: #f4fdf8 !important; }
+[data-theme=dark] .service-row.served td { background: #0f2a1e !important; }
+[data-theme=dark] .service-row.current td { background: #2a1a00 !important; }
+
+/* ─── Algo cards ──────────────────────────────────── */
+.algo-info-card {
+  background: var(--blue-1); border: 1px solid var(--line);
+  border-radius: var(--radius-md); padding: 10px 12px;
+  font-size: .78rem; line-height: 1.5;
+}
+.rating-bar { display:flex; gap:2px; margin-top:3px; }
+.rating-pip {
+  width: 10px; height: 5px; border-radius: 2px;
+  background: var(--line);
+}
+.rating-pip.fill { background: var(--disk-color); }
+
+/* ─── Comparison table ────────────────────────────── */
+.comp-section { padding: 20px; border-top: 1px solid var(--line); background: var(--panel); }
+
+/* ─── Seek accumulator ────────────────────────────── */
+.seek-accum {
+  font-size: 1.8rem; font-weight: 900; color: var(--disk-color);
+  text-align: center;
+}
+.seek-accum-sub { font-size: .72rem; color: var(--muted); text-align: center; }
+.seek-delta {
+  font-size: .78rem; color: var(--muted);
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 3px 8px; border-radius: var(--radius-sm);
+  background: var(--blue-1); margin-bottom: 3px;
+}
+.seek-delta.current { background: var(--disk-light); color: #8b2500; font-weight:700; border-left:3px solid var(--disk-color); }
+.seek-delta.done { opacity: .6; }
+
+/* ─── Add request input ───────────────────────────── */
+.live-add-row {
+  display: flex; gap: 6px; align-items: center;
+  padding: 8px 10px; background: var(--blue-1);
+  border: 1px dashed var(--line); border-radius: var(--radius-md);
+  font-size: .8rem;
+}
+
+/* ─── Summary cards ───────────────────────────────── */
+.summary-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.summary-card {
+  background: var(--blue-1); border: 1px solid var(--line);
+  border-radius: var(--radius-md); padding: 10px;
+  font-size: .78rem;
+}
+.summary-card .sc-title { font-weight:700; margin-bottom:4px; }
+.star-fill { color: #f59e0b; }
+.star-empty { color: var(--line); }
+
+/* ─── Quiz prompt ─────────────────────────────────── */
+.teach-prompt {
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  border: 1px solid #d59a26; border-radius: var(--radius-md);
+  padding: 10px 14px; font-size: .82rem; font-weight: 600;
+  display: none;
+}
+.teach-prompt.show { display: block; }
+
+@media(max-width:1200px){ .disk-layout{grid-template-columns:280px minmax(0,1fr);} .disk-layout .info-panel{display:none;} }
+@media(max-width:780px){ .disk-layout{grid-template-columns:1fr;} .control-panel{position:static;max-height:none;border-right:none;border-bottom:1px solid var(--line);} }
+</style>
 </head>
 <body>
 
@@ -67,478 +203,753 @@
     <a class="nav-link" href="deadlock.html"><span class="dot" style="background:#5865f2"></span>Deadlock</a>
     <a class="nav-link" href="memory-allocation.html"><span class="dot" style="background:#0f9f9a"></span>Memory Allocation</a>
   </div>
-  <div class="nav-actions">
-    <button class="theme-toggle" id="themeBtn">🌙</button>
-  </div>
+  <div class="nav-actions"><button class="theme-toggle" id="themeBtn">🌙</button></div>
 </nav>
 
-<div class="page-layout">
+<!-- Toolbar -->
+<div class="toolbar">
+  <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+    <span class="text-xs text-muted font-bold">ALGO:</span>
+    <div class="algo-tab active" data-algo="fcfs">FCFS</div>
+    <div class="algo-tab" data-algo="sstf">SSTF</div>
+    <div class="algo-tab" data-algo="scan">SCAN</div>
+    <div class="algo-tab" data-algo="cscan">C-SCAN</div>
+    <div class="algo-tab" data-algo="look">LOOK</div>
+    <div class="algo-tab" data-algo="clook">C-LOOK</div>
+  </div>
+  <div class="toolbar-sep"></div>
+  <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+    <span class="text-xs text-muted font-bold">PRESETS:</span>
+    <button class="btn btn-secondary btn-sm" data-preset="clustered">Clustered</button>
+    <button class="btn btn-secondary btn-sm" data-preset="scattered">Scattered</button>
+    <button class="btn btn-secondary btn-sm" data-preset="edge">Edge-heavy</button>
+    <button class="btn btn-secondary btn-sm" data-preset="default">Classic</button>
+  </div>
+  <div class="toolbar-sep"></div>
+  <button class="mode-toggle" id="teachBtn">❓ Predict</button>
+  <button class="mode-toggle" id="compareBtn">⊕ Compare</button>
+</div>
 
-  <!-- Control Panel -->
-  <aside class="control-panel">
-    <div>
-      <div class="card-header" style="margin-bottom:0">
-        <div class="card-icon" style="background:linear-gradient(135deg,#fde8df,#f9baa0)">💿</div>
-        <div>
-          <div class="card-title">Disk Scheduling</div>
-          <div class="card-subtitle">Head Movement Visualizer</div>
+<div class="disk-layout">
+
+<!-- ── Controls ────────────────────────────────────────── -->
+<aside class="control-panel" style="gap:14px">
+  <div>
+    <div class="card-header" style="margin-bottom:0">
+      <div class="card-icon" style="background:linear-gradient(135deg,#fde8df,#f9baa0)">💿</div>
+      <div><div class="card-title">Disk Scheduling</div><div class="card-subtitle" id="algoSubtitle">FCFS</div></div>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label class="form-label">Initial Head Position</label>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input type="range" id="headSlider" min="0" max="199" value="53" style="flex:1"
+        oninput="syncHead(this.value)">
+      <input type="number" id="headInput" value="53" min="0" max="499" style="width:58px"
+        oninput="syncHead(this.value)">
+    </div>
+  </div>
+
+  <div id="dirRow">
+    <label class="form-label">Initial Direction (SCAN / LOOK)</label>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn btn-primary btn-sm" id="dirRight" onclick="setDir('right')" style="flex:1">→ Right (Higher)</button>
+      <button class="btn btn-secondary btn-sm" id="dirLeft" onclick="setDir('left')" style="flex:1">← Left (Lower)</button>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label class="form-label">Max Cylinders (disk size)</label>
+    <input type="number" id="maxCyl" value="199" min="50" max="999">
+  </div>
+
+  <div class="form-group" id="seekRateRow">
+    <label class="form-label">Seek Rate (ms per cylinder, optional)</label>
+    <input type="number" id="seekRate" placeholder="e.g. 0.5" step="0.1" min="0">
+  </div>
+
+  <div>
+    <div class="section-title" style="margin-bottom:6px">Request Queue</div>
+    <div id="reqList" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px"></div>
+    <div class="live-add-row">
+      <input type="number" id="addReqInput" placeholder="cylinder #" min="0" style="width:80px">
+      <button class="btn btn-secondary btn-sm" id="addReqBtn">+ Add</button>
+      <button class="btn btn-warning btn-sm" id="randomReqBtn">⚡</button>
+    </div>
+    <div class="form-hint mt-1" id="reqCount">0 requests</div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="btn-group" style="flex-wrap:nowrap">
+    <button class="btn btn-primary w-full" id="runBtn">▶ Simulate</button>
+    <button class="btn btn-secondary" id="resetBtn">↺</button>
+  </div>
+</aside>
+
+<!-- ── Main Visualization ───────────────────────────────── -->
+<main class="viz-panel">
+
+  <!-- Disk Track -->
+  <div class="disk-track-wrap">
+    <div class="flex items-center justify-between" style="margin-bottom:10px">
+      <div>
+        <div class="panel-title" style="margin:0">Disk Head Track</div>
+        <div class="text-muted text-sm" id="trackSubtitle">Configure and simulate</div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <div style="text-align:center">
+          <div class="seek-accum" id="seekAccum">0</div>
+          <div class="seek-accum-sub">Total Seek</div>
         </div>
+        <div id="starvWarnBadge" style="display:none" class="badge badge-gold">⚠ SSTF Starvation Risk</div>
       </div>
     </div>
 
-    <div>
-      <div class="section-title">Algorithm</div>
-      <div class="algo-grid">
-        <div class="algo-option selected" data-algo="fcfs">FCFS</div>
-        <div class="algo-option" data-algo="sstf">SSTF</div>
-        <div class="algo-option" data-algo="scan">SCAN</div>
-        <div class="algo-option" data-algo="cscan">C-SCAN</div>
-        <div class="algo-option" data-algo="look">LOOK</div>
-        <div class="algo-option" data-algo="clook">C-LOOK</div>
+    <div class="disk-track-container" id="diskTrack">
+      <div class="track-gradient"></div>
+      <div class="track-rail"></div>
+      <div class="track-rail-done" id="trackRailDone" style="width:0"></div>
+      <div class="head-marker" id="headMarker" style="left:27%"></div>
+      <div class="head-label" id="headLabel" style="left:27%">Head: 53</div>
+      <div class="cylinder-axis">
+        <span>0</span>
+        <span id="maxCylLabel">199</span>
+      </div>
+      <div id="requestDots"></div>
+    </div>
+
+    <!-- Current movement info -->
+    <div class="teach-prompt" id="teachPrompt">
+      💡 Predict: Which cylinder will the head visit next?
+    </div>
+
+    <div style="margin-top:10px;display:flex;gap:12px;flex-wrap:wrap" id="movInfo">
+      <div style="font-size:.82rem">
+        <span class="text-muted">From:</span> <strong id="movFrom">—</strong>
+        <span class="text-muted ml-2">→ To:</span> <strong id="movTo">—</strong>
+        <span class="text-muted ml-2">Distance:</span> <strong id="movDist" style="color:var(--disk-color)">—</strong>
       </div>
     </div>
+  </div>
 
-    <div class="form-group">
-      <label class="form-label">Initial Head Position</label>
-      <div style="display:flex; gap:8px; align-items:center">
-        <input type="range" id="headPos" min="0" max="199" value="53" style="flex:1" oninput="document.getElementById('headVal').textContent=this.value">
-        <span id="headVal" style="font-weight:700; color:var(--accent); min-width:2ch">53</span>
-      </div>
+  <!-- Playback Controls -->
+  <div class="playback-bar" id="playbackBar" style="display:none">
+    <button class="btn btn-secondary btn-sm btn-icon" id="stepStartBtn" title="Start">|⟨</button>
+    <button class="btn btn-secondary btn-sm btn-icon" id="stepBackBtn">⟨</button>
+    <button class="btn btn-primary btn-sm" id="playBtn" style="min-width:90px">▶ Play</button>
+    <button class="btn btn-secondary btn-sm btn-icon" id="stepFwdBtn">⟩</button>
+    <button class="btn btn-secondary btn-sm btn-icon" id="stepEndBtn" title="End">⟩|</button>
+    <div class="progress-bar w-full"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+    <div class="step-counter" id="stepCounter">0/0</div>
+    <div class="playback-speed">
+      <button class="speed-btn" data-spd="2">½×</button>
+      <button class="speed-btn active" data-spd="1">1×</button>
+      <button class="speed-btn" data-spd="0.5">2×</button>
+      <button class="speed-btn" data-spd="0.25">4×</button>
     </div>
+  </div>
 
-    <div class="form-group" id="dirRow">
-      <label class="form-label">Initial Direction (SCAN/LOOK)</label>
-      <select id="direction">
-        <option value="right">→ Towards higher cylinders</option>
-        <option value="left">← Towards lower cylinders</option>
-      </select>
+  <!-- Movement Chart -->
+  <div class="movement-chart-wrap" id="chartWrap" style="display:none">
+    <div class="panel-title" style="margin-bottom:8px">Head Movement Over Time</div>
+    <svg id="movChart" width="100%" style="display:block;overflow:visible"></svg>
+  </div>
+
+  <!-- Service order table -->
+  <div id="serviceArea" style="display:none">
+    <div class="section-title" style="margin-bottom:8px">Service Order</div>
+    <div class="table-wrap">
+      <table class="service-table">
+        <thead><tr><th>#</th><th>From</th><th>To Cylinder</th><th>Direction</th><th>Seek Dist.</th><th>Cumulative</th></tr></thead>
+        <tbody id="serviceBody"></tbody>
+      </table>
     </div>
+  </div>
 
-    <div class="form-group">
-      <label class="form-label">Max Cylinders</label>
-      <input type="number" id="maxCyl" value="199" min="50" max="499">
+  <!-- Metrics -->
+  <div id="metricsArea" style="display:none">
+    <div class="metrics-grid" id="metricsGrid"></div>
+    <div id="seekTimeRow" style="display:none;margin-top:8px;font-size:.82rem;color:var(--muted)"></div>
+  </div>
+
+</main>
+
+<!-- ── Info Panel ───────────────────────────────────────── -->
+<aside class="info-panel" style="gap:12px">
+
+  <div>
+    <div class="section-title">Current Step</div>
+    <div class="algo-info-card" id="stepInfoCard">
+      <div class="text-muted">Run simulation to see steps.</div>
     </div>
+  </div>
 
-    <div>
-      <div class="section-title" style="margin-bottom:8px">Request Queue</div>
-      <div id="requestInputs" class="requests-input-grid"></div>
-      <div class="btn-group mt-2">
-        <button class="btn btn-secondary btn-sm" id="addReqBtn">+ Add</button>
-        <button class="btn btn-secondary btn-sm" id="randomReqBtn">⚡ Random</button>
-      </div>
+  <hr>
+
+  <div>
+    <div class="section-title">Algorithm Info</div>
+    <div class="algo-info-card" id="algoInfoCard">
+      <div class="text-muted">Select an algorithm above.</div>
     </div>
+  </div>
 
-    <div class="divider"></div>
-    <div class="btn-group" style="flex-wrap:nowrap">
-      <button class="btn btn-primary w-full" id="runBtn">▶ Simulate</button>
-      <button class="btn btn-secondary" id="resetBtn">↺</button>
+  <hr>
+
+  <div>
+    <div class="section-title">Summary Cards</div>
+    <div class="summary-cards" id="summaryCards">
+      <div class="text-muted text-sm" style="grid-column:span 2">Run simulation to see.</div>
     </div>
-  </aside>
+  </div>
 
-  <!-- Main Panel -->
-  <main class="viz-panel">
+  <hr>
 
-    <!-- Chart -->
-    <div class="card">
-      <div class="flex items-center justify-between" style="margin-bottom:var(--space-4)">
-        <div>
-          <div class="panel-title" style="margin:0">Head Movement Chart</div>
-          <div class="text-muted text-sm" id="algoLabel">First Come First Served (FCFS)</div>
-        </div>
-        <div class="badge badge-red" id="seekBadge" style="display:none">Total Seek: 0</div>
-      </div>
-      <div class="disk-svg-container">
-        <svg class="disk-svg" id="diskSvg" height="340" viewBox="0 0 800 340">
-          <text x="400" y="180" text-anchor="middle" fill="currentColor" opacity="0.4" font-size="14">Configure and click Simulate</text>
-        </svg>
-      </div>
+  <div>
+    <div class="section-title">Seek Delta Log</div>
+    <div id="seekDeltaLog" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:2px">
+      <div class="text-muted text-sm">Run simulation.</div>
     </div>
+  </div>
+</aside>
 
-    <!-- Playback -->
-    <div class="playback-bar" id="playbackBar" style="display:none">
-      <button class="btn btn-secondary btn-sm btn-icon" id="stepBackBtn">⟨⟨</button>
-      <button class="btn btn-primary btn-sm" id="playBtn" style="min-width:90px">▶ Play</button>
-      <button class="btn btn-secondary btn-sm btn-icon" id="stepFwdBtn">⟩⟩</button>
-      <div class="progress-bar w-full"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
-      <div class="step-counter" id="stepCounter">0 / 0</div>
-      <div class="playback-speed">
-        <span class="text-xs text-muted">Speed:</span>
-        <button class="speed-btn" data-spd="2">0.5×</button>
-        <button class="speed-btn active" data-spd="1">1×</button>
-        <button class="speed-btn" data-spd="0.5">2×</button>
-        <button class="speed-btn" data-spd="0.25">4×</button>
-      </div>
-    </div>
+</div>
 
-    <!-- Seek Sequence -->
-    <div id="seekSeqArea" style="display:none">
-      <div class="section-title" style="margin-bottom:8px">Seek Sequence</div>
-      <div class="seek-sequence" id="seekSeqDisplay"></div>
-    </div>
-
-    <!-- Metrics -->
-    <div id="metricsArea" style="display:none">
-      <div class="metrics-grid" id="metricsGrid"></div>
-    </div>
-
-    <!-- Table -->
-    <div id="tableArea" style="display:none">
-      <div class="section-title" style="margin-bottom:8px">Movement Log</div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Step</th><th>From</th><th>To</th><th>Seek Distance</th></tr></thead>
-          <tbody id="movLog"></tbody>
-        </table>
-      </div>
-    </div>
-  </main>
+<!-- ── Comparison Section ───────────────────────────────── -->
+<div class="comp-section" id="compSection" style="display:none">
+  <div class="section-title" style="margin-bottom:12px">Algorithm Comparison (same request queue)</div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Algorithm</th><th>Total Seek</th><th>Avg Seek</th><th>Max Single</th><th>Starvation Risk</th><th>Fairness</th><th>Bar</th></tr></thead>
+      <tbody id="compBody"></tbody>
+    </table>
+  </div>
 </div>
 
 <script>
-// ── Theme ─────────────────────────────────────────────────
-const themeBtn = document.getElementById('themeBtn');
-const root = document.documentElement;
-const saved = localStorage.getItem('os-theme') || 'light';
-root.setAttribute('data-theme', saved);
-themeBtn.textContent = saved === 'dark' ? '☀️' : '🌙';
-themeBtn.addEventListener('click', () => {
-  const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-  root.setAttribute('data-theme', next);
-  themeBtn.textContent = next === 'dark' ? '☀️' : '🌙';
-  localStorage.setItem('os-theme', next);
-});
+// ── Theme ──────────────────────────────────────────────
+const themeBtn=document.getElementById('themeBtn');
+const root=document.documentElement;
+(function(){const s=localStorage.getItem('os-theme')||'light';root.setAttribute('data-theme',s);themeBtn.textContent=s==='dark'?'☀️':'🌙';})();
+themeBtn.onclick=()=>{const n=root.getAttribute('data-theme')==='dark'?'light':'dark';root.setAttribute('data-theme',n);themeBtn.textContent=n==='dark'?'☀️':'🌙';localStorage.setItem('os-theme',n);};
 
-const ALGO_NAMES = {
-  fcfs: 'First Come First Served (FCFS)',
-  sstf: 'Shortest Seek Time First (SSTF)',
-  scan: 'SCAN (Elevator Algorithm)',
-  cscan: 'Circular SCAN (C-SCAN)',
-  look: 'LOOK Algorithm',
-  clook: 'Circular LOOK (C-LOOK)'
+// ── State ──────────────────────────────────────────────
+let currentAlgo='fcfs';
+let currentDir='right';
+let requests=[98,183,37,122,14,124,65,67];
+let seekSequence=[];
+let seekSteps=[];
+let currentStep=0;
+let playing=false;
+let playInterval=null;
+let speedFactor=1;
+let teachMode=false;
+let compareMode=false;
+
+const ALGO_INFO = {
+  fcfs:{
+    name:'First Come First Served',
+    desc:'Serves requests in the order they arrive. Simple but <strong>ignores cylinder proximity</strong>, leading to large unnecessary movements (the "wild swing" problem).',
+    best:'Simplicity, predictability, fairness to arrival order',
+    worst:'Very inefficient — can cause large back-and-forth movements',
+    fairness:3, efficiency:1, starvation:1, complexity:1
+  },
+  sstf:{
+    name:'Shortest Seek Time First',
+    desc:'At each step, serves the request <strong>closest to the current head position</strong>. Greedy approach — good throughput but can starve distant requests.',
+    best:'High throughput, low average seek time',
+    worst:'Starvation of far-away requests when requests cluster near head',
+    fairness:1, efficiency:4, starvation:5, complexity:2
+  },
+  scan:{
+    name:'SCAN (Elevator Algorithm)',
+    desc:'Head moves in one direction serving all requests, <strong>reaches the boundary (0 or max)</strong>, then reverses. Like an elevator — predictable, fair.',
+    best:'Good fairness, eliminates starvation, predictable movement',
+    worst:'Requests at end of last traversal wait longest',
+    fairness:4, efficiency:3, starvation:1, complexity:2
+  },
+  cscan:{
+    name:'Circular SCAN',
+    desc:'Like SCAN but after reaching the end, <strong>jumps back to 0 without serving requests on the return</strong>. More uniform wait times than SCAN.',
+    best:'More uniform wait times across all cylinders',
+    worst:'Jump from max→0 counts as seek distance but serves no requests',
+    fairness:5, efficiency:3, starvation:1, complexity:3
+  },
+  look:{
+    name:'LOOK Algorithm',
+    desc:'Like SCAN but the head <strong>only goes as far as the last request</strong> in each direction — does not travel to the actual disk boundary. More efficient than SCAN.',
+    best:'More efficient than SCAN; avoids unnecessary travel to boundaries',
+    worst:'Slight unfairness compared to C-LOOK',
+    fairness:4, efficiency:4, starvation:1, complexity:2
+  },
+  clook:{
+    name:'Circular LOOK (C-LOOK)',
+    desc:'Combines LOOK and C-SCAN: travels to the <strong>last request in one direction</strong>, then jumps to the first request in the other direction. Best of both worlds.',
+    best:'Best combination of efficiency and uniform wait times',
+    worst:'Slightly more complex than LOOK',
+    fairness:5, efficiency:5, starvation:1, complexity:3
+  }
 };
 
-let currentAlgo = 'fcfs';
-let requests = [98, 183, 37, 122, 14, 124, 65, 67];
-let seekSequence = [];
-let currentStep = 0;
-let playing = false;
-let playInterval = null;
-let speedFactor = 1;
+// ── DOM helpers ────────────────────────────────────────
+function syncHead(v){ document.getElementById('headSlider').value=Math.min(v,199); document.getElementById('headInput').value=v; }
+function setDir(d){ currentDir=d; document.getElementById('dirRight').className=d==='right'?'btn btn-primary btn-sm':'btn btn-secondary btn-sm'; document.getElementById('dirLeft').className=d==='left'?'btn btn-primary btn-sm':'btn btn-secondary btn-sm'; }
+setDir('right');
 
-// ── Request Inputs ────────────────────────────────────────
-function renderRequestInputs() {
-  const wrap = document.getElementById('requestInputs');
-  wrap.innerHTML = requests.map((r, i) => `
-    <div class="req-input-item">
-      <span class="req-label">R${i+1}</span>
-      <input type="number" value="${r}" min="0" max="499" onchange="requests[${i}]=parseInt(this.value)||0">
-      <button class="btn btn-ghost btn-icon btn-sm" onclick="removeReq(${i})" style="padding:2px">✕</button>
+// ── Request management ─────────────────────────────────
+function renderRequests(){
+  const div=document.getElementById('reqList');
+  div.innerHTML=requests.map((r,i)=>`
+    <div style="display:flex;align-items:center;gap:3px;background:var(--blue-1);border:1px solid var(--line);border-radius:20px;padding:2px 8px;font-size:.75rem;font-weight:700">
+      ${r}
+      <button onclick="requests.splice(${i},1);renderRequests()" style="background:none;border:none;cursor:pointer;color:var(--muted);padding:0;font-size:.9rem;line-height:1">×</button>
     </div>
   `).join('');
+  document.getElementById('reqCount').textContent=`${requests.length} request${requests.length!==1?'s':''}`;
 }
 
-function removeReq(i) { if (requests.length > 1) { requests.splice(i, 1); renderRequestInputs(); } }
+document.getElementById('addReqBtn').onclick=()=>{
+  const v=parseInt(document.getElementById('addReqInput').value);
+  const max=parseInt(document.getElementById('maxCyl').value)||199;
+  if(isNaN(v)||v<0||v>max) return;
+  requests.push(v); renderRequests();
+  document.getElementById('addReqInput').value='';
+  // If simulation running, allow live insertion
+  if(seekSequence.length && currentStep<seekSteps.length){
+    run(); // re-run with new request
+  }
+};
+document.getElementById('randomReqBtn').onclick=()=>{
+  const max=parseInt(document.getElementById('maxCyl').value)||199;
+  const n=6+Math.floor(Math.random()*5);
+  requests=Array.from({length:n},()=>Math.floor(Math.random()*(max+1)));
+  renderRequests();
+};
 
-document.getElementById('addReqBtn').addEventListener('click', () => {
-  if (requests.length >= 12) return;
-  requests.push(Math.floor(Math.random() * 200));
-  renderRequestInputs();
+// ── Algo tabs ──────────────────────────────────────────
+document.querySelectorAll('.algo-tab').forEach(tab=>{
+  tab.onclick=()=>{
+    document.querySelectorAll('.algo-tab').forEach(t=>t.classList.remove('active'));
+    tab.classList.add('active'); currentAlgo=tab.dataset.algo;
+    updateAlgoInfo();
+  };
 });
-document.getElementById('randomReqBtn').addEventListener('click', () => {
-  const n = 6 + Math.floor(Math.random() * 5);
-  requests = Array.from({ length: n }, () => Math.floor(Math.random() * 200));
-  renderRequestInputs();
-});
 
-// ── Algorithm Selector ─────────────────────────────────────
-document.querySelectorAll('.algo-option').forEach(el => {
-  el.addEventListener('click', () => {
-    document.querySelectorAll('.algo-option').forEach(x => x.classList.remove('selected'));
-    el.classList.add('selected');
-    currentAlgo = el.dataset.algo;
-    document.getElementById('algoLabel').textContent = ALGO_NAMES[currentAlgo];
-    const scanOnly = ['scan','cscan','look','clook'].includes(currentAlgo);
-    document.getElementById('dirRow').style.display = scanOnly ? '' : 'none';
-  });
-});
-
-// ── Algorithms ────────────────────────────────────────────
-function computeFCFS(head, reqs) {
-  const seq = [head, ...reqs];
-  return seq;
+function updateAlgoInfo(){
+  const info=ALGO_INFO[currentAlgo];
+  document.getElementById('algoSubtitle').textContent=info.name;
+  document.getElementById('algoInfoCard').innerHTML=`
+    <div style="font-weight:700;margin-bottom:4px;color:var(--ink)">${info.name}</div>
+    <div style="color:var(--muted);margin-bottom:8px">${info.desc}</div>
+    <div style="font-size:.72rem;margin-bottom:3px"><span style="color:var(--mem-color);font-weight:700">✓ Best for:</span> ${info.best}</div>
+    <div style="font-size:.72rem"><span style="color:var(--disk-color);font-weight:700">✗ Worst:</span> ${info.worst}</div>
+  `;
+  // Show starvation warning for SSTF
+  document.getElementById('starvWarnBadge').style.display=currentAlgo==='sstf'?'':'none';
+  const scanAlgos=['scan','cscan','look','clook'];
+  document.getElementById('dirRow').style.display=scanAlgos.includes(currentAlgo)?'':'none';
 }
+updateAlgoInfo();
 
-function computeSSTF(head, reqs) {
-  const remaining = [...reqs];
-  const seq = [head]; let cur = head;
-  while (remaining.length) {
-    remaining.sort((a, b) => Math.abs(a - cur) - Math.abs(b - cur));
-    cur = remaining.shift(); seq.push(cur);
+// ── Algorithms ─────────────────────────────────────────
+function computeFCFS(head,reqs){ return [head,...reqs]; }
+
+function computeSSTF(head,reqs){
+  const rem=[...reqs]; const seq=[head]; let cur=head;
+  while(rem.length){
+    rem.sort((a,b)=>Math.abs(a-cur)-Math.abs(b-cur));
+    cur=rem.shift(); seq.push(cur);
   }
   return seq;
 }
 
-function computeSCAN(head, reqs, dir, maxCyl) {
-  const sorted = [...reqs].sort((a, b) => a - b);
-  const seq = [head];
-  if (dir === 'right') {
-    const right = sorted.filter(r => r >= head);
-    const left = sorted.filter(r => r < head).reverse();
-    right.forEach(r => seq.push(r));
-    seq.push(maxCyl);
-    left.forEach(r => seq.push(r));
+function computeSCAN(head,reqs,dir,max){
+  const sorted=[...reqs].sort((a,b)=>a-b);
+  const seq=[head];
+  if(dir==='right'){
+    sorted.filter(r=>r>=head).forEach(r=>seq.push(r));
+    seq.push(max);
+    sorted.filter(r=>r<head).reverse().forEach(r=>seq.push(r));
   } else {
-    const left = sorted.filter(r => r <= head).reverse();
-    const right = sorted.filter(r => r > head);
-    left.forEach(r => seq.push(r));
+    sorted.filter(r=>r<=head).reverse().forEach(r=>seq.push(r));
     seq.push(0);
-    right.forEach(r => seq.push(r));
+    sorted.filter(r=>r>head).forEach(r=>seq.push(r));
   }
   return seq;
 }
 
-function computeCSCAN(head, reqs, dir, maxCyl) {
-  const sorted = [...reqs].sort((a, b) => a - b);
-  const seq = [head];
-  if (dir === 'right') {
-    const right = sorted.filter(r => r >= head);
-    const left = sorted.filter(r => r < head);
-    right.forEach(r => seq.push(r));
-    seq.push(maxCyl);
-    seq.push(0);
-    left.forEach(r => seq.push(r));
+function computeCSCAN(head,reqs,dir,max){
+  const sorted=[...reqs].sort((a,b)=>a-b);
+  const seq=[head];
+  if(dir==='right'){
+    sorted.filter(r=>r>=head).forEach(r=>seq.push(r));
+    seq.push(max); seq.push(0);
+    sorted.filter(r=>r<head).forEach(r=>seq.push(r));
   } else {
-    const left = sorted.filter(r => r <= head).reverse();
-    const right = sorted.filter(r => r > head).reverse();
-    left.forEach(r => seq.push(r));
-    seq.push(0);
-    seq.push(maxCyl);
-    right.forEach(r => seq.push(r));
+    sorted.filter(r=>r<=head).reverse().forEach(r=>seq.push(r));
+    seq.push(0); seq.push(max);
+    sorted.filter(r=>r>head).reverse().forEach(r=>seq.push(r));
   }
   return seq;
 }
 
-function computeLOOK(head, reqs, dir) {
-  const sorted = [...reqs].sort((a, b) => a - b);
-  const seq = [head];
-  if (dir === 'right') {
-    const right = sorted.filter(r => r >= head);
-    const left = sorted.filter(r => r < head).reverse();
-    right.forEach(r => seq.push(r));
-    left.forEach(r => seq.push(r));
+function computeLOOK(head,reqs,dir){
+  const sorted=[...reqs].sort((a,b)=>a-b);
+  const seq=[head];
+  if(dir==='right'){
+    sorted.filter(r=>r>=head).forEach(r=>seq.push(r));
+    sorted.filter(r=>r<head).reverse().forEach(r=>seq.push(r));
   } else {
-    const left = sorted.filter(r => r <= head).reverse();
-    const right = sorted.filter(r => r > head);
-    left.forEach(r => seq.push(r));
-    right.forEach(r => seq.push(r));
+    sorted.filter(r=>r<=head).reverse().forEach(r=>seq.push(r));
+    sorted.filter(r=>r>head).forEach(r=>seq.push(r));
   }
   return seq;
 }
 
-function computeCLOOK(head, reqs, dir) {
-  const sorted = [...reqs].sort((a, b) => a - b);
-  const seq = [head];
-  if (dir === 'right') {
-    const right = sorted.filter(r => r >= head);
-    const left = sorted.filter(r => r < head);
-    right.forEach(r => seq.push(r));
-    left.forEach(r => seq.push(r));
+function computeCLOOK(head,reqs,dir){
+  const sorted=[...reqs].sort((a,b)=>a-b);
+  const seq=[head];
+  if(dir==='right'){
+    sorted.filter(r=>r>=head).forEach(r=>seq.push(r));
+    sorted.filter(r=>r<head).forEach(r=>seq.push(r));
   } else {
-    const left = sorted.filter(r => r <= head).reverse();
-    const right = sorted.filter(r => r > head).reverse();
-    left.forEach(r => seq.push(r));
-    right.forEach(r => seq.push(r));
+    sorted.filter(r=>r<=head).reverse().forEach(r=>seq.push(r));
+    sorted.filter(r=>r>head).reverse().forEach(r=>seq.push(r));
   }
   return seq;
 }
 
-function computeSeq() {
-  const head = parseInt(document.getElementById('headPos').value);
-  const reqs = [...requests];
-  const dir = document.getElementById('direction').value;
-  const max = parseInt(document.getElementById('maxCyl').value) || 199;
-  switch (currentAlgo) {
-    case 'fcfs': return computeFCFS(head, reqs);
-    case 'sstf': return computeSSTF(head, reqs);
-    case 'scan': return computeSCAN(head, reqs, dir, max);
-    case 'cscan': return computeCSCAN(head, reqs, dir, max);
-    case 'look': return computeLOOK(head, reqs, dir);
-    case 'clook': return computeCLOOK(head, reqs, dir);
+function getSeqForAlgo(algo, head, reqs, dir, max){
+  switch(algo){
+    case 'fcfs': return computeFCFS(head,reqs);
+    case 'sstf': return computeSSTF(head,reqs);
+    case 'scan': return computeSCAN(head,reqs,dir,max);
+    case 'cscan': return computeCSCAN(head,reqs,dir,max);
+    case 'look': return computeLOOK(head,reqs,dir);
+    case 'clook': return computeCLOOK(head,reqs,dir);
   }
   return [head];
 }
 
-// ── SVG Chart ─────────────────────────────────────────────
-function renderChart(seq, upTo) {
-  const svg = document.getElementById('diskSvg');
-  const max = parseInt(document.getElementById('maxCyl').value) || 199;
-  const W = 800, H = 340;
-  const padL = 60, padR = 20, padT = 30, padB = 30;
-  const chartW = W - padL - padR;
-  const chartH = H - padT - padB;
-  const n = seq.length;
-  const xStep = chartW / Math.max(n - 1, 1);
-
-  function cx(i) { return padL + i * xStep; }
-  function cy(v) { return padT + chartH - (v / max * chartH); }
-
-  const isDark = root.getAttribute('data-theme') === 'dark';
-  const lineColor = isDark ? '#44627e' : '#c9d8e8';
-  const textColor = isDark ? '#b8c7d6' : '#607080';
-  const inkColor = isDark ? '#f3f7fb' : '#14212f';
-  const accColor = '#ef6c3e';
-  const doneColor = '#1673c7';
-
-  let html = `
-    <!-- Y axis -->
-    <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT+chartH}" stroke="${lineColor}" stroke-width="1"/>
-  `;
-
-  // Y-axis ticks
-  const yStep = max <= 100 ? 20 : max <= 200 ? 50 : 100;
-  for (let v = 0; v <= max; v += yStep) {
-    const y = cy(v);
-    html += `<line x1="${padL-4}" y1="${y}" x2="${padL}" y2="${y}" stroke="${lineColor}" stroke-width="1"/>`;
-    html += `<text x="${padL-8}" y="${y+4}" text-anchor="end" fill="${textColor}" font-size="10">${v}</text>`;
-    html += `<line x1="${padL}" y1="${y}" x2="${padL+chartW}" y2="${y}" stroke="${lineColor}" stroke-width="0.5" stroke-dasharray="3,4"/>`;
+// Build step-by-step data
+function buildSteps(seq,max){
+  const steps=[];
+  let cumulative=0;
+  for(let i=0;i<seq.length;i++){
+    if(i===0){ steps.push({pos:seq[0],from:seq[0],to:seq[0],dist:0,cumulative:0,isBoundary:false,dir:''}); continue; }
+    const from=seq[i-1], to=seq[i];
+    const dist=Math.abs(to-from);
+    cumulative+=dist;
+    const isBoundary=(to===0||to===max);
+    const dir=to>from?'→ right':'← left';
+    const reason=buildStepReason(currentAlgo,from,to,dist,requests,isBoundary,seq,i);
+    steps.push({pos:to,from,to,dist,cumulative,isBoundary,dir,reason});
   }
-
-  // X-axis labels (step numbers)
-  for (let i = 0; i < n; i++) {
-    const x = cx(i);
-    html += `<line x1="${x}" y1="${padT+chartH}" x2="${x}" y2="${padT+chartH+4}" stroke="${lineColor}" stroke-width="1"/>`;
-    html += `<text x="${x}" y="${padT+chartH+16}" text-anchor="middle" fill="${textColor}" font-size="10">${i}</text>`;
-  }
-  html += `<text x="${padL-40}" y="${padT+chartH/2}" text-anchor="middle" fill="${textColor}" font-size="11" transform="rotate(-90,${padL-40},${padT+chartH/2})">Cylinder</text>`;
-
-  // Connecting lines (already visited)
-  for (let i = 0; i < Math.min(upTo - 1, n - 1); i++) {
-    const x1 = cx(i), y1 = cy(seq[i]);
-    const x2 = cx(i+1), y2 = cy(seq[i+1]);
-    html += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${doneColor}" stroke-width="2.5" opacity="0.7"/>`;
-  }
-
-  // Current moving line (animated)
-  if (upTo > 1 && upTo <= n) {
-    const i = upTo - 2;
-    const x1 = cx(i), y1 = cy(seq[i]);
-    const x2 = cx(i+1), y2 = cy(seq[i+1]);
-    html += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${accColor}" stroke-width="3"/>`;
-  }
-
-  // Points
-  for (let i = 0; i < n; i++) {
-    const x = cx(i), y = cy(seq[i]);
-    const isHead = i === 0;
-    const isCurrent = i === upTo - 1;
-    const isDone = i < upTo;
-    const color = isHead ? '#22a06b' : isCurrent ? accColor : isDone ? doneColor : lineColor;
-    const r = isCurrent ? 8 : isHead ? 7 : 5;
-    html += `<circle cx="${x}" cy="${y}" r="${r}" fill="${color}" stroke="#fff" stroke-width="${isCurrent || isHead ? 2 : 1}"/>`;
-    if (isCurrent || isHead) {
-      html += `<text x="${x}" y="${y - 12}" text-anchor="middle" fill="${color}" font-size="11" font-weight="700">${seq[i]}</text>`;
-    }
-  }
-
-  svg.innerHTML = html;
+  return steps;
 }
 
-// ── Run ───────────────────────────────────────────────────
-document.getElementById('runBtn').addEventListener('click', () => {
+function buildStepReason(algo,from,to,dist,reqs,isBoundary,seq,stepIdx){
+  const remaining=reqs.filter(r=>seq.slice(stepIdx).includes(r));
+  switch(algo){
+    case 'fcfs': return `Serving next in arrival order: cylinder ${to}. Seek: ${dist}`;
+    case 'sstf': return `Nearest unserved request from ${from}: cylinder ${to} (distance=${dist}). Remaining: [${seq.slice(stepIdx+1).filter(r=>reqs.includes(r)).join(', ')}]`;
+    case 'scan': return isBoundary ? `SCAN hits boundary at ${to}. Direction reverses. (${dist} cylinders traveled)` : `SCAN sweeps ${from}→${to} (dist=${dist}). Serving requests in path.`;
+    case 'cscan': return isBoundary ? `C-SCAN: ${to===0?'Jumped to cylinder 0 (no service on return)':'Reached max cylinder '+to+', jumping to 0 next'}` : `C-SCAN sweeps ${from}→${to} (dist=${dist})`;
+    case 'look': return isBoundary ? '' : `LOOK moves ${from}→${to} (dist=${dist}). Unlike SCAN, doesn't go to boundary.`;
+    case 'clook': return `C-LOOK: ${from}→${to} (dist=${dist}). ${isBoundary?'Jump to first request in opposite direction.':''}`;
+  }
+  return '';
+}
+
+// ── Run ────────────────────────────────────────────────
+document.getElementById('runBtn').onclick=run;
+function run(){
   stopPlay();
-  seekSequence = computeSeq();
-  currentStep = seekSequence.length;
+  const head=parseInt(document.getElementById('headInput').value)||53;
+  const max=parseInt(document.getElementById('maxCyl').value)||199;
+  const seq=getSeqForAlgo(currentAlgo,head,[...requests],currentDir,max);
+  seekSequence=seq;
+  seekSteps=buildSteps(seq,max);
+  currentStep=seekSteps.length-1;
 
-  const totalSeek = seekSequence.slice(1).reduce((s, v, i) => s + Math.abs(v - seekSequence[i]), 0);
-  const avgSeek = (totalSeek / (seekSequence.length - 1)).toFixed(1);
+  document.getElementById('playbackBar').style.display='flex';
+  document.getElementById('chartWrap').style.display='';
+  document.getElementById('serviceArea').style.display='';
+  document.getElementById('metricsArea').style.display='';
+  document.getElementById('maxCylLabel').textContent=max;
 
-  document.getElementById('seekBadge').textContent = `Total Seek: ${totalSeek}`;
-  document.getElementById('seekBadge').style.display = '';
-  document.getElementById('playbackBar').style.display = 'flex';
-  document.getElementById('seekSeqArea').style.display = '';
-  document.getElementById('metricsArea').style.display = '';
-  document.getElementById('tableArea').style.display = '';
+  renderServiceTable();
+  renderMetrics();
+  renderMovChart();
+  renderSummaryCards();
+  renderSeekDeltaLog(currentStep);
+  updateTrack(currentStep);
+  updatePlayback();
+  if(compareMode) runComparison();
+}
 
-  document.getElementById('metricsGrid').innerHTML = `
-    <div class="metric-card"><div class="metric-value" style="color:var(--disk-color)">${totalSeek}</div><div class="metric-label">Total Seek</div></div>
-    <div class="metric-card"><div class="metric-value" style="color:var(--cpu-color)">${avgSeek}</div><div class="metric-label">Avg Seek</div></div>
-    <div class="metric-card"><div class="metric-value" style="color:var(--mem-color)">${seekSequence.length - 1}</div><div class="metric-label">Total Moves</div></div>
-    <div class="metric-card"><div class="metric-value" style="color:var(--ink)">${Math.max(...seekSequence) - Math.min(...seekSequence)}</div><div class="metric-label">Range</div></div>
+// ── Track rendering ────────────────────────────────────
+function updateTrack(stepIdx){
+  const step=seekSteps[stepIdx];
+  if(!step) return;
+  const max=parseInt(document.getElementById('maxCyl').value)||199;
+  const trackEl=document.getElementById('diskTrack');
+  const trackW=trackEl.clientWidth-40; // minus padding
+  const frac=v=>20+((v/max)*trackW);
+
+  // Head
+  const headPct=step.pos/max*100;
+  document.getElementById('headMarker').style.left=`calc(${frac(step.pos)}px)`;
+  document.getElementById('headLabel').style.left=`calc(${frac(step.pos)}px)`;
+  document.getElementById('headLabel').textContent=`Head: ${step.pos}`;
+  document.getElementById('trackRailDone').style.width=(Math.abs(step.pos-seekSteps[0].pos)/max*100)+'%';
+
+  // Request dots
+  const dotsEl=document.getElementById('requestDots');
+  const served=seekSteps.slice(1,stepIdx+1).map(s=>s.to);
+  dotsEl.innerHTML=requests.map(r=>{
+    const isServed=served.includes(r);
+    const isCurrent=step.to===r && stepIdx>0;
+    const cls=isCurrent?'current':isServed?'served':'pending';
+    return `<div class="request-dot ${cls}" style="left:${frac(r)}px" title="Cylinder ${r}: ${cls}"></div>`;
+  }).join('');
+
+  // Movement info
+  if(stepIdx>0){
+    document.getElementById('movFrom').textContent=step.from;
+    document.getElementById('movTo').textContent=step.to;
+    document.getElementById('movDist').textContent=step.dist+' cylinders';
+  }
+
+  // Seek accumulator
+  document.getElementById('seekAccum').textContent=step.cumulative;
+
+  // Progress
+  document.getElementById('progressFill').style.width=(stepIdx/(seekSteps.length-1)*100)+'%';
+  document.getElementById('stepCounter').textContent=`${stepIdx}/${seekSteps.length-1}`;
+
+  // Step info card
+  const info=ALGO_INFO[currentAlgo];
+  document.getElementById('stepInfoCard').innerHTML=`
+    <div style="font-size:.72rem;color:var(--muted);margin-bottom:4px">Step ${stepIdx} of ${seekSteps.length-1}</div>
+    <div style="font-weight:700;margin-bottom:4px">${step.from} → ${step.to} <span style="color:var(--disk-color)">(+${step.dist})</span></div>
+    <div style="color:var(--muted);font-size:.78rem">${step.reason||'Starting position'}</div>
+    ${step.isBoundary?`<div style="color:var(--accent-3);font-size:.72rem;margin-top:4px">⚓ Boundary point</div>`:''}
+    <div style="margin-top:6px;font-size:.72rem;color:var(--muted)">Cumulative: <strong style="color:var(--disk-color)">${step.cumulative}</strong></div>
   `;
 
-  // Movement log
-  const logBody = document.getElementById('movLog');
-  logBody.innerHTML = seekSequence.slice(1).map((to, i) => {
-    const from = seekSequence[i];
-    const dist = Math.abs(to - from);
-    return `<tr><td>${i+1}</td><td>${from}</td><td>${to}</td><td>${dist}</td></tr>`;
-  }).join('');
+  // Teaching prompt
+  if(teachMode && stepIdx<seekSteps.length-1){
+    document.getElementById('teachPrompt').classList.add('show');
+    document.getElementById('teachPrompt').textContent=`💡 Predict: Where will the head go from cylinder ${step.pos}?`;
+  } else {
+    document.getElementById('teachPrompt').classList.remove('show');
+  }
 
-  renderChart(seekSequence, currentStep);
-  renderSeekSeq(currentStep);
-  updatePlayback();
-});
-
-function renderSeekSeq(upTo) {
-  const display = document.getElementById('seekSeqDisplay');
-  display.innerHTML = seekSequence.map((v, i) => {
-    let cls = i === upTo - 1 ? 'current' : i < upTo ? 'done' : '';
-    const arrow = i < seekSequence.length - 1 ? '<span class="arrow">→</span>' : '';
-    return `<div class="seek-step"><div class="num ${cls}">${v}</div>${arrow}</div>`;
-  }).join('');
-}
-
-function updatePlayback() {
-  const n = seekSequence.length;
-  document.getElementById('stepCounter').textContent = `${currentStep} / ${n - 1}`;
-  const pct = n > 1 ? ((currentStep - 1) / (n - 1) * 100) : 0;
-  document.getElementById('progressFill').style.width = Math.max(0, pct) + '%';
-  renderChart(seekSequence, currentStep);
-  renderSeekSeq(currentStep);
-}
-
-document.getElementById('stepBackBtn').addEventListener('click', () => {
-  stopPlay(); if (currentStep > 1) { currentStep--; updatePlayback(); }
-});
-document.getElementById('stepFwdBtn').addEventListener('click', () => {
-  stopPlay(); if (currentStep < seekSequence.length) { currentStep++; updatePlayback(); }
-});
-
-function stopPlay() {
-  clearInterval(playInterval); playing = false;
-  document.getElementById('playBtn').textContent = '▶ Play';
-}
-document.getElementById('playBtn').addEventListener('click', () => {
-  if (playing) { stopPlay(); return; }
-  if (currentStep >= seekSequence.length) currentStep = 1;
-  playing = true;
-  document.getElementById('playBtn').textContent = '⏸ Pause';
-  playInterval = setInterval(() => {
-    if (currentStep >= seekSequence.length) { stopPlay(); return; }
-    currentStep++; updatePlayback();
-  }, 700 * speedFactor);
-});
-
-document.querySelectorAll('.speed-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.speed-btn').forEach(x => x.classList.remove('active'));
-    btn.classList.add('active');
-    speedFactor = parseFloat(btn.dataset.spd);
-    if (playing) { stopPlay(); document.getElementById('playBtn').click(); }
+  // Highlight service table row
+  document.querySelectorAll('.service-row').forEach((row,i)=>{
+    row.classList.remove('current','served');
+    if(i===stepIdx-1) row.classList.add('current');
+    else if(i<stepIdx-1) row.classList.add('served');
   });
+  renderSeekDeltaLog(stepIdx);
+}
+
+function renderSeekDeltaLog(upTo){
+  const log=document.getElementById('seekDeltaLog');
+  if(!seekSteps.length){ log.innerHTML='<div class="text-muted text-sm">Run simulation.</div>'; return; }
+  log.innerHTML=seekSteps.slice(1).map((s,i)=>{
+    const cls=i===upTo-1?'current':i<upTo-1?'done':'';
+    return `<div class="seek-delta ${cls}">${s.from}→${s.to} <span style="font-size:.68rem;color:var(--muted)">(${s.dir})</span> <strong>+${s.dist}</strong></div>`;
+  }).join('');
+  const cur=log.querySelector('.current');
+  if(cur) cur.scrollIntoView({block:'nearest'});
+}
+
+function renderServiceTable(){
+  const body=document.getElementById('serviceBody');
+  body.innerHTML=seekSteps.slice(1).map((s,i)=>`
+    <tr class="service-row">
+      <td>${i+1}</td>
+      <td>${s.from}</td>
+      <td><strong>${s.to}</strong>${s.isBoundary?'<span class="badge badge-gold" style="margin-left:4px">boundary</span>':''}</td>
+      <td style="color:var(--muted)">${s.dir}</td>
+      <td style="color:var(--disk-color);font-weight:700">${s.dist}</td>
+      <td>${s.cumulative}</td>
+    </tr>
+  `).join('');
+}
+
+function renderMetrics(){
+  const total=seekSteps[seekSteps.length-1]?.cumulative||0;
+  const moves=seekSteps.length-1;
+  const avg=moves>0?(total/moves).toFixed(1):0;
+  const maxSingle=Math.max(...seekSteps.slice(1).map(s=>s.dist),0);
+  const seekRate=parseFloat(document.getElementById('seekRate').value);
+
+  document.getElementById('metricsGrid').innerHTML=`
+    <div class="metric-card"><div class="metric-value" style="color:var(--disk-color)">${total}</div><div class="metric-label">Total Seek</div></div>
+    <div class="metric-card"><div class="metric-value" style="color:var(--cpu-color)">${avg}</div><div class="metric-label">Avg Seek</div></div>
+    <div class="metric-card"><div class="metric-value" style="color:var(--accent-3)">${maxSingle}</div><div class="metric-label">Max Single</div></div>
+    <div class="metric-card"><div class="metric-value" style="color:var(--mem-color)">${moves}</div><div class="metric-label">Movements</div></div>
+  `;
+  if(!isNaN(seekRate) && seekRate>0){
+    document.getElementById('seekTimeRow').style.display='';
+    document.getElementById('seekTimeRow').innerHTML=`Estimated total seek time: <strong>${(total*seekRate).toFixed(1)} ms</strong> (at ${seekRate} ms/cylinder)`;
+  }
+}
+
+function renderMovChart(){
+  const svg=document.getElementById('movChart');
+  const max=parseInt(document.getElementById('maxCyl').value)||199;
+  const W=svg.parentElement.clientWidth||700, H=220;
+  const padL=50,padR=20,padT=20,padB=30;
+  const cW=W-padL-padR, cH=H-padT-padB;
+  const n=seekSteps.length;
+  const xS=cW/Math.max(n-1,1);
+  const isDark=root.getAttribute('data-theme')==='dark';
+  const lc=isDark?'#44627e':'#c9d8e8', tc=isDark?'#b8c7d6':'#607080';
+
+  function px(i){ return padL+i*xS; }
+  function py(v){ return padT+cH-(v/max*cH); }
+
+  let html=`<rect width="${W}" height="${H}" fill="none"/>`;
+  // Y grid
+  const ystep=max<=100?20:max<=200?50:100;
+  for(let v=0;v<=max;v+=ystep){
+    html+=`<line x1="${padL}" y1="${py(v)}" x2="${padL+cW}" y2="${py(v)}" stroke="${lc}" stroke-width=".5" stroke-dasharray="3,4"/>
+      <text x="${padL-6}" y="${py(v)+4}" text-anchor="end" fill="${tc}" font-size="10">${v}</text>`;
+  }
+  html+=`<line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT+cH}" stroke="${lc}" stroke-width="1"/>`;
+  // X labels
+  for(let i=0;i<n;i++){
+    html+=`<line x1="${px(i)}" y1="${padT+cH}" x2="${px(i)}" y2="${padT+cH+4}" stroke="${lc}"/>
+      <text x="${px(i)}" y="${padT+cH+16}" text-anchor="middle" fill="${tc}" font-size="10">${i}</text>`;
+  }
+  // Path
+  let pathD=seekSteps.map((s,i)=>`${i===0?'M':'L'}${px(i)},${py(s.pos)}`).join(' ');
+  html+=`<path d="${pathD}" fill="none" stroke="var(--disk-color)" stroke-width="2.5" stroke-linejoin="round"/>`;
+  // Points
+  seekSteps.forEach((s,i)=>{
+    const isHead=i===0, color=isHead?'var(--mem-color)':'var(--disk-color)';
+    html+=`<circle cx="${px(i)}" cy="${py(s.pos)}" r="${isHead?6:4}" fill="${color}" stroke="#fff" stroke-width="1.5"/>`;
+  });
+  svg.setAttribute('height',H);
+  svg.innerHTML=html;
+}
+
+function renderSummaryCards(){
+  const info=ALGO_INFO[currentAlgo];
+  const stars=(n)=>Array.from({length:5},(_,i)=>`<span class="${i<n?'star-fill':'star-empty'}">★</span>`).join('');
+  document.getElementById('summaryCards').innerHTML=`
+    <div class="summary-card"><div class="sc-title">🤝 Fairness</div>${stars(info.fairness)}</div>
+    <div class="summary-card"><div class="sc-title">⚡ Efficiency</div>${stars(info.efficiency)}</div>
+    <div class="summary-card"><div class="sc-title">⚠ Starvation Risk</div>${stars(info.starvation)}</div>
+    <div class="summary-card"><div class="sc-title">🔧 Complexity</div>${stars(info.complexity)}</div>
+  `;
+}
+
+// ── Playback ───────────────────────────────────────────
+function updatePlayback(){ updateTrack(currentStep); }
+document.getElementById('stepBackBtn').onclick=()=>{ stopPlay(); if(currentStep>0){currentStep--;updatePlayback();} };
+document.getElementById('stepFwdBtn').onclick=()=>{ stopPlay(); if(currentStep<seekSteps.length-1){currentStep++;updatePlayback();} };
+document.getElementById('stepStartBtn').onclick=()=>{ stopPlay(); currentStep=0; updatePlayback(); };
+document.getElementById('stepEndBtn').onclick=()=>{ stopPlay(); currentStep=seekSteps.length-1; updatePlayback(); };
+function stopPlay(){ clearInterval(playInterval); playing=false; document.getElementById('playBtn').textContent='▶ Play'; }
+document.getElementById('playBtn').onclick=()=>{
+  if(playing){stopPlay();return;}
+  if(currentStep>=seekSteps.length-1) currentStep=0;
+  playing=true; document.getElementById('playBtn').textContent='⏸ Pause';
+  playInterval=setInterval(()=>{
+    if(currentStep>=seekSteps.length-1){stopPlay();return;}
+    currentStep++; updatePlayback();
+  },600*speedFactor);
+};
+document.querySelectorAll('.speed-btn').forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll('.speed-btn').forEach(x=>x.classList.remove('active'));
+    btn.classList.add('active'); speedFactor=parseFloat(btn.dataset.spd);
+    if(playing){stopPlay();document.getElementById('playBtn').click();}
+  };
 });
 
-document.getElementById('resetBtn').addEventListener('click', () => {
-  stopPlay(); seekSequence = []; currentStep = 0;
-  document.getElementById('diskSvg').innerHTML = '<text x="400" y="180" text-anchor="middle" fill="currentColor" opacity="0.4" font-size="14">Configure and click Simulate</text>';
-  document.getElementById('playbackBar').style.display = 'none';
-  document.getElementById('seekSeqArea').style.display = 'none';
-  document.getElementById('metricsArea').style.display = 'none';
-  document.getElementById('tableArea').style.display = 'none';
-  document.getElementById('seekBadge').style.display = 'none';
+// ── Modes ──────────────────────────────────────────────
+document.getElementById('teachBtn').onclick=function(){ teachMode=!teachMode; this.classList.toggle('active',teachMode); };
+document.getElementById('compareBtn').onclick=function(){
+  compareMode=!compareMode; this.classList.toggle('active',compareMode);
+  if(compareMode&&seekSteps.length) runComparison();
+  else document.getElementById('compSection').style.display='none';
+};
+
+// ── Comparison ─────────────────────────────────────────
+function runComparison(){
+  const head=parseInt(document.getElementById('headInput').value)||53;
+  const max=parseInt(document.getElementById('maxCyl').value)||199;
+  const algos=['fcfs','sstf','scan','cscan','look','clook'];
+  const results=algos.map(a=>{
+    const seq=getSeqForAlgo(a,head,[...requests],currentDir,max);
+    const steps=buildSteps2(seq);
+    const total=steps[steps.length-1]?.cumulative||0;
+    const avg=steps.length>1?(total/(steps.length-1)):0;
+    const maxS=Math.max(...steps.slice(1).map(s=>s.dist),0);
+    return {algo:a,total,avg:avg.toFixed(1),maxS,info:ALGO_INFO[a]};
+  });
+  const minTotal=Math.min(...results.map(r=>r.total));
+  const maxTotal=Math.max(...results.map(r=>r.total));
+  document.getElementById('compSection').style.display='';
+  document.getElementById('compBody').innerHTML=results.map(r=>{
+    const pct=maxTotal>0?(r.total/maxTotal*100):0;
+    const isBest=r.total===minTotal;
+    return `<tr style="${r.algo===currentAlgo?'background:var(--blue-1)':''}">
+      <td><strong>${ALGO_INFO[r.algo].name}</strong>${r.algo===currentAlgo?'<span class="badge badge-red" style="margin-left:4px">current</span>':''}</td>
+      <td class="${isBest?'comp-best':''}">${r.total}${isBest?' ✓':''}</td>
+      <td>${r.avg}</td>
+      <td>${r.maxS}</td>
+      <td>${r.info.starvation>3?'⚠ High':'Low'}</td>
+      <td>${r.info.fairness}/5</td>
+      <td style="width:100px"><div class="comp-bar"><div class="comp-fill" style="width:${pct}%;background:${isBest?'var(--mem-color)':'var(--disk-color)'}"></div></div></td>
+    </tr>`;
+  }).join('');
+}
+
+function buildSteps2(seq){
+  const steps=[{pos:seq[0],cumulative:0,dist:0,from:seq[0],to:seq[0]}];
+  let cum=0;
+  for(let i=1;i<seq.length;i++){
+    const d=Math.abs(seq[i]-seq[i-1]); cum+=d;
+    steps.push({pos:seq[i],cumulative:cum,dist:d,from:seq[i-1],to:seq[i]});
+  }
+  return steps;
+}
+
+// ── Presets ────────────────────────────────────────────
+const PRESETS={
+  clustered:[55,60,58,62,57,65,59,63],
+  scattered:[14,186,3,192,8,175,40,160,22,170],
+  edge:[2,5,195,198,3,196,4,199,1,197],
+  default:[98,183,37,122,14,124,65,67]
+};
+document.querySelectorAll('[data-preset]').forEach(btn=>{
+  btn.onclick=()=>{ requests=[...PRESETS[btn.dataset.preset]]; renderRequests(); };
 });
 
-renderRequestInputs();
+// ── Reset ──────────────────────────────────────────────
+document.getElementById('resetBtn').onclick=()=>{
+  stopPlay(); seekSequence=[]; seekSteps=[]; currentStep=0;
+  document.getElementById('playbackBar').style.display='none';
+  document.getElementById('chartWrap').style.display='none';
+  document.getElementById('serviceArea').style.display='none';
+  document.getElementById('metricsArea').style.display='none';
+  document.getElementById('compSection').style.display='none';
+  document.getElementById('requestDots').innerHTML='';
+  document.getElementById('seekAccum').textContent='0';
+  document.getElementById('movFrom').textContent='—';
+  document.getElementById('movTo').textContent='—';
+  document.getElementById('movDist').textContent='—';
+  document.getElementById('seekDeltaLog').innerHTML='<div class="text-muted text-sm">Run simulation.</div>';
+};
+
+renderRequests();
 </script>
 </body>
 </html>

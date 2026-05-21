@@ -1,83 +1,356 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="light">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CPU Scheduling — OS Algorithms</title>
-  <link rel="stylesheet" href="css/style.css">
-  <style>
-    .process-row td { vertical-align: middle; }
-    .pid-badge {
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 28px; height: 28px; border-radius: 50%;
-      font-size: 0.75rem; font-weight: 800; color: #fff;
-    }
-    .gantt-wrap { min-height: 100px; }
-    .gantt-chart { position: relative; }
-    .gantt-rows { display: flex; flex-direction: column; gap: 6px; }
-    .gantt-proc-row { display: flex; align-items: center; gap: 6px; }
-    .gantt-proc-label {
-      width: 26px; height: 26px; border-radius: 50%;
-      font-size: 0.7rem; font-weight: 800; color: #fff;
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0;
-    }
-    .gantt-blocks { position: relative; flex: 1; height: 32px; }
-    .gantt-block {
-      position: absolute; top: 0; height: 32px;
-      border-radius: 5px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 0.68rem; font-weight: 700; color: rgba(255,255,255,0.9);
-      overflow: hidden;
-      border: 1px solid rgba(0,0,0,0.15);
-      transition: opacity 0.2s;
-    }
-    .gantt-block::after {
-      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 40%;
-      background: rgba(255,255,255,0.18);
-    }
-    .gantt-block.dimmed { opacity: 0.25; }
-    .gantt-block.current { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent); z-index:2; }
-    .timeline-row {
-      position: relative; height: 20px; flex: 1;
-      border-top: 1px solid var(--line);
-      margin-left: 32px;
-    }
-    .t-tick {
-      position: absolute; top: 0; transform: translateX(-50%);
-      font-size: 0.65rem; color: var(--muted); font-weight: 600;
-      padding-top: 3px;
-    }
-    .t-tick::before {
-      content: ''; position: absolute; top: -5px; left: 50%;
-      width: 1px; height: 5px; background: var(--line);
-    }
-    .quantum-row { display: flex; align-items: center; gap: var(--space-3); }
-    .quantum-row.hidden { display: none; }
-    .proc-table-wrap { overflow-x: auto; border-radius: var(--radius-md); border: 1px solid var(--line); }
-    .proc-table-wrap table { font-size: 0.82rem; }
-    .proc-table-wrap input[type=number] {
-      width: 58px; padding: 4px 6px; text-align: center;
-      border-radius: var(--radius-sm); font-size: 0.82rem;
-    }
-    .current-time-bar {
-      font-size: 0.82rem; color: var(--muted);
-      display: flex; align-items: center; gap: 8px;
-    }
-    .time-val { font-size: 1.1rem; font-weight: 800; color: var(--ink); min-width: 2ch; }
-    .metrics-table td:first-child { font-weight: 600; }
-    .p-color-0 { background: #1673c7; }
-    .p-color-1 { background: #d85f3f; }
-    .p-color-2 { background: #22a06b; }
-    .p-color-3 { background: #7c5bb0; }
-    .p-color-4 { background: #ef9c00; }
-    .p-color-5 { background: #0f9f9a; }
-    .p-color-6 { background: #db2777; }
-    .p-color-7 { background: #65a30d; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CPU Scheduling — OS Algorithms</title>
+<link rel="stylesheet" href="css/style.css">
+<style>
+/* ─── Layout ─────────────────────────────────────────── */
+.scheduler-layout {
+  display: grid;
+  grid-template-columns: 310px minmax(0,1fr) 290px;
+  min-height: calc(100vh - 108px);
+}
+.toolbar {
+  background: linear-gradient(180deg,#f8fbff,#eef6ff);
+  border-bottom: 1px solid var(--line);
+  padding: 8px 20px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+[data-theme=dark] .toolbar { background: linear-gradient(180deg,#172434,#0f1c2e); }
+.toolbar-group { display: flex; gap: 6px; align-items: center; }
+.toolbar-sep { width: 1px; height: 24px; background: var(--line); margin: 0 4px; }
+.mode-toggle {
+  padding: 5px 12px; border-radius: 20px;
+  font-size: 0.75rem; font-weight: 700;
+  border: 1px solid var(--line); cursor: pointer;
+  background: var(--panel); color: var(--muted);
+  transition: all .15s;
+}
+.mode-toggle.active { background: var(--accent); color: #fff; border-color: var(--blue-5); }
+
+/* ─── Algo Tabs ───────────────────────────────────────── */
+.algo-tabs { display: flex; gap: 3px; flex-wrap: wrap; }
+.algo-tab {
+  padding: 6px 10px; border-radius: var(--radius-sm);
+  font-size: 0.78rem; font-weight: 600;
+  border: 1px solid var(--line); cursor: pointer;
+  background: var(--blue-1); color: var(--muted);
+  transition: all .15s; white-space: nowrap;
+}
+.algo-tab:hover { background: var(--blue-2); color: var(--blue-5); }
+.algo-tab.active {
+  background: var(--accent); color: #fff;
+  border-color: var(--blue-5);
+  box-shadow: 0 2px 6px rgba(22,115,199,.3);
+}
+
+/* ─── Process Table ───────────────────────────────────── */
+.proc-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-md); }
+.proc-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+.proc-table th {
+  padding: 7px 8px; background: var(--blue-1);
+  font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--muted);
+  border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+.proc-table td { padding: 5px 6px; border-bottom: 1px solid var(--line); }
+.proc-table tr:last-child td { border-bottom: none; }
+.proc-table input[type=number] {
+  width: 48px; text-align: center; padding: 4px 4px;
+  border-radius: var(--radius-sm); font-size: 0.8rem;
+}
+.proc-row { transition: background .2s; }
+.proc-row.state-running { background: rgba(34,160,107,.1) !important; }
+.proc-row.state-ready { background: rgba(22,115,199,.06) !important; }
+.proc-row.state-done { opacity: .6; }
+.state-chip {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .7rem; font-weight: 800; color: #fff; flex-shrink: 0;
+}
+.state-indicator {
+  width: 8px; height: 8px; border-radius: 50%;
+  display: inline-block; flex-shrink: 0;
+}
+.si-not-arrived { background: var(--muted); opacity: .4; }
+.si-ready { background: var(--accent); animation: pulse-dot 1.5s infinite; }
+.si-running { background: var(--mem-color); animation: pulse-dot .8s infinite; box-shadow: 0 0 0 3px rgba(34,160,107,.25); }
+.si-done { background: var(--muted); }
+@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+.invalid-field { border-color: var(--disk-color) !important; background: #fff7f5 !important; }
+.field-hint { font-size:.65rem; color:var(--disk-color); display:none; }
+.field-hint.show { display:block; }
+
+/* ─── Gantt Chart ─────────────────────────────────────── */
+.gantt-container {
+  background: var(--blue-1); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); padding: 14px; overflow: hidden;
+}
+.gantt-scroll { overflow-x: auto; padding-bottom: 4px; }
+.gantt-tick-row {
+  display: flex; align-items: flex-start;
+  position: relative; min-height: 20px; margin-bottom: 6px;
+}
+.arrival-zone { height: 20px; position: relative; display: flex; flex-shrink: 0; }
+.arrival-marker {
+  position: absolute; display: flex; flex-direction: column; align-items: center;
+  transform: translateX(-50%); z-index: 2;
+}
+.arrival-flag {
+  font-size: .62rem; font-weight: 800;
+  padding: 1px 4px; border-radius: 3px; color: #fff; white-space: nowrap;
+}
+.arrival-line {
+  width: 1px; height: 8px; background: currentColor; opacity: .6;
+}
+.gantt-main-row { display: flex; align-items: center; gap: 4px; }
+.gantt-row-label {
+  width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .68rem; font-weight: 800; color: #fff;
+}
+.gantt-cells { display: flex; gap: 1px; flex-shrink: 0; }
+.gantt-cell {
+  height: 26px; min-width: 20px;
+  border-radius: 3px; position: relative;
+  transition: transform .1s;
+  border: 1px solid rgba(0,0,0,.1);
+  display: flex; align-items: center; justify-content: center;
+  font-size: .6rem; font-weight: 800; color: rgba(255,255,255,.85);
+  cursor: pointer;
+}
+.gantt-cell.idle {
+  background: repeating-linear-gradient(45deg,#d8e6f2,#d8e6f2 3px,#e6f0f8 3px,#e6f0f8 6px);
+  border-color: var(--line); color: var(--muted);
+}
+.gantt-cell.current-tick {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 3px var(--accent-2);
+  transform: scaleY(1.15);
+  z-index: 3;
+}
+.gantt-cell::after {
+  content:''; position:absolute; top:0; left:0; right:0;
+  height:35%; background:rgba(255,255,255,.18); pointer-events:none;
+}
+.ctx-switch-marker {
+  position: absolute; top: -8px; left: 50%;
+  transform: translateX(-50%);
+  width: 1px; height: 8px; background: var(--accent-2);
+}
+.ctx-switch-marker::before {
+  content:'⚡'; position:absolute; top:-12px; left:50%; transform:translateX(-50%);
+  font-size:.65rem;
+}
+.gantt-timeline {
+  display: flex; gap: 1px; margin-top: 4px;
+  padding-left: 30px; /* align with cells */
+}
+.t-label {
+  min-width: 20px; text-align: center;
+  font-size: .62rem; color: var(--muted); font-weight: 600;
+}
+.current-tick-cursor {
+  position: absolute; top: 0; bottom: 0; width: 2px;
+  background: var(--accent-2); pointer-events: none;
+  transition: left .15s;
+}
+
+/* ─── Ready Queue Panel ───────────────────────────────── */
+.ready-queue-panel {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); padding: 12px 14px;
+}
+.rq-label { font-size:.7rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px; }
+.rq-slots { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; min-height: 38px; }
+.rq-proc {
+  display: flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 20px;
+  font-size: .78rem; font-weight: 700;
+  border: 1px solid rgba(0,0,0,.1);
+  color: #fff;
+  transition: all .3s ease;
+  animation: slide-in .3s ease;
+}
+@keyframes slide-in { from{transform:translateX(-12px);opacity:0} to{transform:none;opacity:1} }
+.rq-proc-pos {
+  font-size: .62rem; font-weight: 800;
+  background: rgba(255,255,255,.25); border-radius: 10px;
+  padding: 1px 5px;
+}
+.rq-proc-info { font-size: .65rem; opacity: .85; }
+.rq-empty { color: var(--muted); font-size: .82rem; font-style: italic; }
+.rq-arrow { color: var(--muted); font-size: .9rem; }
+
+/* ─── Decision Log ────────────────────────────────────── */
+.decision-log {
+  background: var(--blue-1); border: 1px solid var(--line);
+  border-radius: var(--radius-md); padding: 10px;
+  max-height: 180px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.dec-entry {
+  padding: 5px 10px; border-radius: 5px;
+  font-size: .78rem; line-height: 1.4;
+  border-left: 3px solid var(--line);
+  background: var(--panel);
+}
+.dec-entry.type-select { border-left-color: var(--accent); }
+.dec-entry.type-complete { border-left-color: var(--mem-color); background: #f4fdf8; }
+.dec-entry.type-preempt { border-left-color: var(--disk-color); background: #fff7f5; }
+.dec-entry.type-idle { border-left-color: var(--muted); background: var(--blue-1); color: var(--muted); font-style: italic; }
+.dec-entry.type-arrive { border-left-color: var(--accent-3); background: #fffbf0; }
+.dec-entry.type-rr-requeue { border-left-color: var(--process-color); background: var(--process-light); }
+.dec-entry.type-aging { border-left-color: var(--accent-3); }
+.dec-entry.current { outline: 2px solid var(--accent); outline-offset: -1px; }
+[data-theme=dark] .dec-entry.type-complete { background: #0f2a1e; }
+[data-theme=dark] .dec-entry.type-preempt { background: #2a0e00; }
+.dec-time { font-weight:800; color:var(--accent); margin-right:4px; }
+.dec-reason { color: var(--muted); font-size:.72rem; margin-top:2px; }
+
+/* ─── Process States ──────────────────────────────────── */
+.process-state-card {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; border-radius: var(--radius-md);
+  border: 1px solid var(--line); background: var(--blue-1);
+  font-size: .82rem; transition: all .2s;
+  position: relative;
+}
+.process-state-card.state-running {
+  background: rgba(34,160,107,.08);
+  border-color: var(--mem-color);
+  box-shadow: 0 0 0 2px rgba(34,160,107,.15);
+}
+.process-state-card.state-ready { background: rgba(22,115,199,.06); border-color: var(--blue-3); }
+.process-state-card.state-done { opacity: .65; }
+.state-badge {
+  font-size: .65rem; font-weight: 700; padding: 2px 7px; border-radius: 10px;
+  margin-left: auto; white-space: nowrap;
+}
+.sb-not-arrived { background: var(--line); color: var(--muted); }
+.sb-ready { background: var(--cpu-light); color: var(--blue-5); }
+.sb-running { background: var(--mem-light); color: #135b49; }
+.sb-done { background: #e8f5e9; color: #2e7d32; }
+.starv-badge {
+  position: absolute; right: -4px; top: -4px;
+  font-size: .6rem; background: #fbbf24; color: #5a3800;
+  border-radius: 10px; padding: 1px 5px; font-weight: 800;
+  border: 1px solid #d59a26;
+}
+
+/* ─── Metrics ─────────────────────────────────────────── */
+.formula-row {
+  background: var(--blue-1); border: 1px solid var(--line);
+  border-radius: var(--radius-md); padding: 8px 12px;
+  font-size: .78rem; margin-bottom: 4px;
+}
+.formula-name { font-weight: 800; color: var(--ink); }
+.formula-eq { color: var(--muted); font-family: 'Courier New', monospace; font-size: .75rem; }
+.per-proc-row {
+  display: flex; gap: 6px; align-items: center;
+  padding: 5px 8px; border-radius: var(--radius-sm);
+  background: var(--blue-1); border: 1px solid var(--line);
+  font-size: .78rem; margin-bottom: 3px;
+}
+.per-proc-calc { color: var(--muted); font-size: .72rem; flex: 1; text-align: right; }
+
+/* ─── Scrubber ────────────────────────────────────────── */
+.scrubber-wrap {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); padding: 10px 14px;
+}
+.scrubber-label {
+  font-size: .7rem; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .06em;
+  display: flex; justify-content: space-between; margin-bottom: 6px;
+}
+input[type=range].scrubber {
+  width: 100%; accent-color: var(--accent); height: 6px;
+}
+
+/* ─── Quiz Modal ──────────────────────────────────────── */
+.quiz-overlay {
+  position: fixed; inset: 0; background: rgba(10,20,40,.5);
+  backdrop-filter: blur(4px); z-index: 999;
+  display: flex; align-items: center; justify-content: center;
+  animation: fadeIn .2s;
+}
+.quiz-card {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius-xl); padding: 28px; max-width: 440px; width: 90%;
+  box-shadow: 0 24px 64px rgba(0,0,30,.2);
+  animation: slideUp .3s ease;
+}
+@keyframes slideUp { from{transform:translateY(20px);opacity:0} to{transform:none;opacity:1} }
+.quiz-q { font-size:1.05rem; font-weight:700; color:var(--ink); margin-bottom:14px; }
+.quiz-options { display:flex; flex-direction:column; gap:8px; margin-bottom:16px; }
+.quiz-opt {
+  display:flex; align-items:center; gap:10px;
+  padding:9px 14px; border-radius:var(--radius-md);
+  border:2px solid var(--line); cursor:pointer;
+  font-size:.85rem; font-weight:600; transition:all .15s;
+  background: var(--blue-1);
+}
+.quiz-opt:hover { border-color:var(--accent); background:var(--blue-2); }
+.quiz-opt.selected { border-color:var(--accent); background:var(--blue-2); }
+.quiz-opt.correct { border-color:var(--mem-color); background:var(--mem-light); color:#135b49; }
+.quiz-opt.wrong { border-color:var(--disk-color); background:var(--disk-light); color:#8b2500; }
+.quiz-result { font-size:.88rem; padding:10px 14px; border-radius:var(--radius-md); margin-bottom:12px; font-weight:600; }
+.quiz-result.correct { background:var(--mem-light); color:#135b49; border:1px solid var(--mem-color); }
+.quiz-result.wrong { background:var(--disk-light); color:#8b2500; border:1px solid var(--disk-color); }
+.quiz-score { font-size:.78rem; color:var(--muted); text-align:center; }
+
+/* ─── Comparison ──────────────────────────────────────── */
+.comparison-section {
+  border-top: 1px solid var(--line);
+  padding: 20px;
+  background: var(--panel);
+}
+.comp-table { font-size:.8rem; }
+.comp-table td { padding: 7px 12px; }
+.comp-best { font-weight:800; color:var(--mem-color); }
+.comp-worst { color:var(--disk-color); }
+.comp-bar-cell { width:120px; }
+.comp-bar { height:6px; border-radius:3px; background:var(--line); overflow:hidden; }
+.comp-fill { height:100%; border-radius:3px; transition:width .5s; }
+
+/* ─── Context switch marker ───────────────────────────── */
+.ctx-marker {
+  width:2px; height:18px; background:var(--accent-2); position:absolute;
+  bottom:0; transform:translateX(-50%);
+}
+
+/* ─── Aging badge ─────────────────────────────────────── */
+.aging-badge {
+  font-size:.62rem; background:#fbbf24; color:#5a3800;
+  border-radius:8px; padding:1px 5px; font-weight:800; margin-left:4px;
+}
+
+/* ─── Teaching mode overlay ───────────────────────────── */
+.teach-blur { filter:blur(8px); pointer-events:none; user-select:none; }
+.teach-reveal {
+  text-align:center; padding:20px;
+  border:2px dashed var(--accent); border-radius:var(--radius-lg);
+  color:var(--muted); font-size:.9rem;
+}
+
+/* ─── Responsive ──────────────────────────────────────── */
+@media(max-width:1200px) {
+  .scheduler-layout { grid-template-columns: 280px minmax(0,1fr); }
+  .scheduler-layout .info-panel { display:none; }
+}
+@media(max-width:800px) {
+  .scheduler-layout { grid-template-columns: 1fr; }
+  .control-panel { position:static; max-height:none; border-right:none; border-bottom:1px solid var(--line); }
+  .toolbar { gap:6px; }
+}
+</style>
 </head>
 <body>
 
+<!-- ══════════ NAV ══════════════════════════════════════ -->
 <nav class="top-nav">
   <a class="nav-brand" href="index.html">
     <div class="nav-brand-mark">OS</div>
@@ -96,597 +369,1411 @@
   </div>
 </nav>
 
-<div class="page-layout-3">
+<!-- ══════════ TOOLBAR ══════════════════════════════════ -->
+<div class="toolbar">
+  <div class="toolbar-group">
+    <span class="text-xs text-muted font-bold">PRESETS:</span>
+    <button class="btn btn-secondary btn-sm" data-preset="simple">Simple</button>
+    <button class="btn btn-secondary btn-sm" data-preset="idle">CPU Idle</button>
+    <button class="btn btn-secondary btn-sm" data-preset="tie">Tie Case</button>
+    <button class="btn btn-secondary btn-sm" data-preset="starve">Starvation</button>
+    <button class="btn btn-secondary btn-sm" data-preset="beladys">Belady-like</button>
+  </div>
+  <div class="toolbar-sep"></div>
+  <div class="toolbar-group">
+    <input type="number" id="randCount" value="4" min="2" max="8" style="width:44px" title="Process count">
+    <input type="number" id="randMin" value="1" min="1" max="10" style="width:44px" title="Min burst">
+    <input type="number" id="randMax" value="8" min="1" max="20" style="width:44px" title="Max burst">
+    <button class="btn btn-warning btn-sm" id="randomBtn">⚡ Random</button>
+  </div>
+  <div class="toolbar-sep"></div>
+  <div class="toolbar-group">
+    <button class="mode-toggle" id="teachBtn" title="Teaching mode hides metrics until simulation ends">👁 Teaching</button>
+    <button class="mode-toggle" id="quizBtn" title="Quiz pauses at each decision point">❓ Quiz</button>
+    <button class="mode-toggle" id="compareBtn" title="Compare all algorithms side-by-side">⊕ Compare</button>
+  </div>
+</div>
 
-  <!-- Control Panel -->
-  <aside class="control-panel">
-    <div>
-      <div class="card-header" style="margin-bottom:0">
-        <div class="card-icon" style="background:linear-gradient(135deg,#dceeff,#9bc8ef)">🕐</div>
-        <div>
-          <div class="card-title">CPU Scheduling</div>
-          <div class="card-subtitle">Gantt Chart Visualizer</div>
+<!-- ══════════ MAIN LAYOUT ══════════════════════════════ -->
+<div class="scheduler-layout">
+
+<!-- ── LEFT: Controls ─────────────────────────────────── -->
+<aside class="control-panel" style="gap:14px">
+
+  <div>
+    <div class="section-title">Algorithm</div>
+    <div class="algo-tabs" id="algoTabs">
+      <div class="algo-tab active" data-algo="fcfs">FCFS</div>
+      <div class="algo-tab" data-algo="sjf">SJF</div>
+      <div class="algo-tab" data-algo="srtf">SRTF</div>
+      <div class="algo-tab" data-algo="rr">Round Robin</div>
+      <div class="algo-tab" data-algo="priority_np">Priority NP</div>
+      <div class="algo-tab" data-algo="priority_p">Priority P</div>
+    </div>
+  </div>
+
+  <!-- Algorithm description -->
+  <div id="algoDesc" style="font-size:.78rem; color:var(--muted); line-height:1.5; padding:8px 10px; background:var(--blue-1); border:1px solid var(--line); border-radius:var(--radius-md)"></div>
+
+  <!-- Process table -->
+  <div>
+    <div class="flex items-center justify-between" style="margin-bottom:6px">
+      <div class="section-title" style="margin:0">Processes</div>
+      <div style="display:flex; gap:4px">
+        <span class="legend-item"><span class="state-indicator si-not-arrived"></span><span class="text-xs text-muted">Not arr.</span></span>
+        <span class="legend-item"><span class="state-indicator si-ready"></span><span class="text-xs text-muted">Ready</span></span>
+        <span class="legend-item"><span class="state-indicator si-running"></span><span class="text-xs text-muted">Running</span></span>
+        <span class="legend-item"><span class="state-indicator si-done"></span><span class="text-xs text-muted">Done</span></span>
+      </div>
+    </div>
+    <div class="proc-table-wrap">
+      <table class="proc-table">
+        <thead>
+          <tr>
+            <th>State</th><th>PID</th>
+            <th>Arrival<br><span style="color:var(--muted);font-weight:400;font-size:.65rem">≥0</span></th>
+            <th>Burst<br><span style="color:var(--muted);font-weight:400;font-size:.65rem">≥1</span></th>
+            <th id="priHead" class="hidden">Priority<br><span style="color:var(--muted);font-weight:400;font-size:.65rem">1=high</span></th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="procBody"></tbody>
+      </table>
+    </div>
+    <div id="tableErrors" style="margin-top:4px; font-size:.72rem; color:var(--disk-color); display:none"></div>
+    <div class="btn-group mt-2">
+      <button class="btn btn-secondary btn-sm" id="addProcBtn">+ Add</button>
+      <button class="btn btn-ghost btn-sm" id="clearAllBtn">Clear All</button>
+    </div>
+  </div>
+
+  <!-- Options -->
+  <div id="quantumOpt" class="hidden">
+    <div class="section-title">Round Robin Options</div>
+    <div class="form-group">
+      <label class="form-label">Time Quantum</label>
+      <div style="display:flex; gap:8px; align-items:center">
+        <input type="range" id="quantumSlider" min="1" max="10" value="2" oninput="document.getElementById('quantumVal').textContent=this.value; document.getElementById('quantumInput').value=this.value">
+        <input type="number" id="quantumInput" value="2" min="1" max="20" style="width:54px" oninput="document.getElementById('quantumSlider').value=Math.min(10,+this.value); document.getElementById('quantumVal').textContent=this.value">
+      </div>
+    </div>
+  </div>
+
+  <div id="agingOpt" class="hidden">
+    <div class="section-title">Priority Options</div>
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px">
+      <input type="checkbox" id="agingCheck" style="width:16px;height:16px">
+      <label for="agingCheck" class="form-label" style="margin:0; cursor:pointer">Enable Aging</label>
+    </div>
+    <div id="agingParams" class="hidden" style="display:flex; gap:8px; align-items:center; font-size:.8rem">
+      <span class="text-muted">Boost every</span>
+      <input type="number" id="agingInterval" value="5" min="2" max="20" style="width:50px">
+      <span class="text-muted">ticks</span>
+    </div>
+    <div class="form-hint mt-1">Aging increases process priority (lowers number) for long waits, preventing starvation.</div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="btn-group" style="flex-wrap:nowrap">
+    <button class="btn btn-primary w-full" id="runBtn">▶ Simulate</button>
+    <button class="btn btn-secondary" id="resetBtn" title="Reset">↺</button>
+  </div>
+
+  <!-- Tie-breaking rules -->
+  <div style="font-size:.72rem; color:var(--muted); padding:8px 10px; background:var(--blue-1); border:1px solid var(--line); border-radius:var(--radius-sm)">
+    <strong style="color:var(--ink)">Tie-breaking rules:</strong>
+    1️⃣ Shorter/earlier metric &nbsp; 2️⃣ Earlier arrival time &nbsp; 3️⃣ Lower PID
+  </div>
+</aside>
+
+<!-- ── CENTER: Visualization ──────────────────────────── -->
+<main class="viz-panel">
+
+  <!-- Ready Queue -->
+  <div class="ready-queue-panel">
+    <div class="rq-label">⏳ Ready Queue <span id="rqAlgoNote" style="font-weight:400;text-transform:none;font-size:.72rem;color:var(--muted)">(arrival order)</span></div>
+    <div class="rq-slots" id="readyQueueSlots">
+      <span class="rq-empty">Run simulation to see the ready queue</span>
+    </div>
+  </div>
+
+  <!-- Gantt Chart -->
+  <div class="gantt-container">
+    <div class="flex items-center justify-between" style="margin-bottom:10px">
+      <div>
+        <div class="panel-title" style="margin:0" id="ganttTitle">Gantt Chart</div>
+        <div class="text-muted text-sm" id="ganttSubtitle">Step through execution time unit by time unit</div>
+      </div>
+      <div style="display:flex; gap:6px; align-items:center">
+        <span class="legend-item"><div class="legend-swatch" style="background:var(--accent)"></div><span class="text-xs">Process</span></span>
+        <span class="legend-item">
+          <div class="legend-swatch" style="background:repeating-linear-gradient(45deg,#d8e6f2,#d8e6f2 3px,#e6f0f8 3px,#e6f0f8 6px)"></div>
+          <span class="text-xs">Idle</span>
+        </span>
+        <span class="legend-item" id="ctxLegend" style="display:none"><span style="color:var(--accent-2); font-size:.75rem">⚡</span><span class="text-xs">Ctx Switch</span></span>
+      </div>
+    </div>
+
+    <div class="gantt-scroll" id="ganttScroll">
+      <div id="ganttInner" style="display:flex;flex-direction:column;gap:2px; min-width:fit-content">
+        <div style="color:var(--muted);font-size:.85rem;padding:20px 0;text-align:center">
+          Configure processes and click <strong>Simulate</strong>
         </div>
       </div>
     </div>
 
-    <div>
-      <div class="section-title">Algorithm</div>
-      <div class="algo-grid">
-        <div class="algo-option selected" data-algo="fcfs">FCFS</div>
-        <div class="algo-option" data-algo="sjf">SJF (NP)</div>
-        <div class="algo-option" data-algo="srtf">SRTF (P)</div>
-        <div class="algo-option" data-algo="rr">Round Robin</div>
-        <div class="algo-option" data-algo="priority_np">Priority NP</div>
-        <div class="algo-option" data-algo="priority_p">Priority P</div>
-      </div>
-      <div class="quantum-row hidden mt-3" id="quantumRow">
-        <label class="form-label" style="white-space:nowrap;margin:0">Time Quantum:</label>
-        <input type="number" id="quantum" value="2" min="1" max="10" style="width:70px">
-      </div>
+    <div id="legendRow" class="legend mt-2" style="flex-wrap:wrap;gap:8px"></div>
+  </div>
+
+  <!-- Scrubber + Playback -->
+  <div class="scrubber-wrap" id="scrubberWrap" style="display:none">
+    <div class="scrubber-label">
+      <span>⏱ Timeline</span>
+      <span id="tickLabel" style="color:var(--accent);font-size:.82rem">t = 0</span>
     </div>
+    <input type="range" class="scrubber" id="scrubber" min="0" value="0" step="1">
+  </div>
 
-    <div>
-      <div class="section-title" style="margin-bottom:8px">Processes</div>
-      <div class="proc-table-wrap">
-        <table id="procTable">
-          <thead>
-            <tr>
-              <th>PID</th><th>Arrival</th><th>Burst</th>
-              <th id="priHead" class="hidden">Priority</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="procBody"></tbody>
-        </table>
-      </div>
-      <div class="btn-group mt-3">
-        <button class="btn btn-secondary btn-sm" id="addProcBtn">+ Add</button>
-        <button class="btn btn-secondary btn-sm" id="randomBtn">⚡ Random</button>
-      </div>
+  <!-- Playback Controls -->
+  <div class="playback-bar" id="playbackBar" style="display:none">
+    <button class="btn btn-secondary btn-sm btn-icon" id="stepStartBtn" title="Go to start">|⟨</button>
+    <button class="btn btn-secondary btn-sm btn-icon" id="stepBackBtn" title="Step back">⟨</button>
+    <button class="btn btn-primary btn-sm" id="playBtn" style="min-width:90px">▶ Play</button>
+    <button class="btn btn-secondary btn-sm btn-icon" id="stepFwdBtn" title="Step forward">⟩</button>
+    <button class="btn btn-secondary btn-sm btn-icon" id="stepEndBtn" title="Go to end">⟩|</button>
+    <div class="step-counter" id="stepCounter">t=0</div>
+    <div class="playback-speed">
+      <span class="text-xs text-muted">Speed:</span>
+      <button class="speed-btn" data-spd="2">½×</button>
+      <button class="speed-btn active" data-spd="1">1×</button>
+      <button class="speed-btn" data-spd="0.5">2×</button>
+      <button class="speed-btn" data-spd="0.25">4×</button>
     </div>
+  </div>
 
-    <div class="divider"></div>
-    <div class="btn-group" style="flex-wrap:nowrap">
-      <button class="btn btn-primary w-full" id="runBtn">▶ Compute</button>
-      <button class="btn btn-secondary" id="resetBtn" title="Reset">↺</button>
-    </div>
-  </aside>
+  <!-- Decision Log -->
+  <div id="decLogArea" style="display:none">
+    <div class="section-title" style="margin-bottom:6px">📋 Decision Log</div>
+    <div class="decision-log" id="decisionLog"></div>
+  </div>
 
-  <!-- Visualization Panel -->
-  <main class="viz-panel">
-    <div class="card">
-      <div class="flex items-center justify-between" style="margin-bottom:var(--space-4)">
-        <div>
-          <div class="panel-title" style="margin:0">Gantt Chart</div>
-          <div class="text-muted text-sm" id="algoLabel">First Come First Served</div>
-        </div>
-        <div class="current-time-bar" id="timeBar" style="display:none">
-          <span>t =</span><span class="time-val" id="timeVal">0</span>
-        </div>
-      </div>
-
-      <div class="gantt-wrap" id="ganttWrap">
-        <div style="color:var(--muted); font-size:0.85rem; text-align:center; padding:24px 0">
-          Configure processes and click <strong>Compute</strong> to visualize
-        </div>
-      </div>
-
-      <div class="legend mt-3" id="ganttLegend"></div>
-    </div>
-
-    <!-- Playback controls -->
-    <div class="playback-bar" id="playbackBar" style="display:none">
-      <button class="btn btn-secondary btn-sm btn-icon" id="stepBackBtn" title="Step back">⟨⟨</button>
-      <button class="btn btn-primary btn-sm" id="playBtn" style="min-width:90px">▶ Play</button>
-      <button class="btn btn-secondary btn-sm btn-icon" id="stepFwdBtn" title="Step forward">⟩⟩</button>
-      <div class="progress-bar w-full">
-        <div class="progress-fill" id="progressFill" style="width:0%"></div>
-      </div>
-      <div class="step-counter" id="stepCounter">0 / 0</div>
-      <div class="playback-speed">
-        <span class="text-xs text-muted">Speed:</span>
-        <button class="speed-btn" data-spd="2">0.5×</button>
-        <button class="speed-btn active" data-spd="1">1×</button>
-        <button class="speed-btn" data-spd="0.5">2×</button>
-        <button class="speed-btn" data-spd="0.25">4×</button>
-      </div>
-    </div>
-
-    <!-- Metrics -->
-    <div id="metricsArea" style="display:none">
-      <div class="section-title">Performance Metrics</div>
+  <!-- Metrics (teach-mode hides this) -->
+  <div id="metricsArea" style="display:none">
+    <div class="section-title" style="margin-bottom:8px">📊 Performance Metrics</div>
+    <div id="teachRevealWrapper">
       <div class="metrics-grid" id="metricsGrid"></div>
-      <div class="table-wrap mt-4">
+      <div id="formulasSection" style="margin-top:12px">
+        <div class="section-title" style="margin-bottom:6px">Formulas</div>
+        <div class="formula-row"><span class="formula-name">CT</span> <span class="formula-eq">= Time when process finishes executing</span></div>
+        <div class="formula-row"><span class="formula-name">TAT</span> <span class="formula-eq">= CT − Arrival Time</span></div>
+        <div class="formula-row"><span class="formula-name">WT</span> <span class="formula-eq">= TAT − Burst Time (= time in ready queue)</span></div>
+        <div class="formula-row"><span class="formula-name">RT</span> <span class="formula-eq">= First CPU time − Arrival Time</span></div>
+      </div>
+      <div class="table-wrap mt-3">
         <table>
-          <thead>
-            <tr><th>Process</th><th>Arrival</th><th>Burst</th><th>Completion</th><th>Turnaround</th><th>Waiting</th><th>Response</th></tr>
-          </thead>
+          <thead><tr><th>P</th><th>Arr</th><th>Burst</th><th>CT</th><th>TAT<br><span style="font-weight:400;font-size:.65rem">CT−Arr</span></th><th>WT<br><span style="font-weight:400;font-size:.65rem">TAT−Burst</span></th><th>RT<br><span style="font-weight:400;font-size:.65rem">1st CPU−Arr</span></th></tr></thead>
           <tbody id="metricsBody"></tbody>
-          <tfoot id="metricsFoot" style="font-weight:700; background:var(--blue-1)"></tfoot>
+          <tfoot id="metricsFoot"></tfoot>
         </table>
       </div>
     </div>
-  </main>
+    <div id="teachRevealBtn" style="display:none" class="teach-reveal">
+      <strong>Teaching Mode Active</strong><br>
+      Try to predict the metrics before seeing them.<br>
+      <button class="btn btn-primary mt-3" id="revealResultsBtn">Reveal Results</button>
+    </div>
+  </div>
 
-  <!-- Info Panel -->
-  <aside class="info-panel">
-    <div class="section-title">Process States</div>
-    <div id="statesPanel" style="display:flex; flex-direction:column; gap:6px">
+</main>
+
+<!-- ── RIGHT: Info Panel ───────────────────────────────── -->
+<aside class="info-panel" style="gap:12px">
+
+  <div>
+    <div class="section-title">Current Time: <span id="curTimeDisp" style="color:var(--accent);font-size:1rem;font-weight:800">—</span></div>
+    <div id="procStatesList" style="display:flex;flex-direction:column;gap:5px">
       <div class="text-muted text-sm">Run the simulation to see process states.</div>
     </div>
+  </div>
 
-    <hr>
+  <hr>
 
-    <div class="section-title">Step Log</div>
-    <div class="step-log" id="stepLog">
-      <div class="step-entry">Ready for simulation.</div>
+  <div>
+    <div class="section-title">⚡ Current Decision</div>
+    <div id="decisionBox" style="font-size:.82rem;color:var(--muted);line-height:1.6;padding:8px 10px;background:var(--blue-1);border:1px solid var(--line);border-radius:var(--radius-md)">
+      No simulation running.
     </div>
+  </div>
 
-    <hr>
+  <hr>
 
-    <div class="section-title">Algorithm Info</div>
-    <div id="algoInfo" style="font-size:0.8rem; color:var(--muted); line-height:1.6">
-      <strong style="color:var(--ink)">FCFS</strong> — First Come First Served<br><br>
-      Processes are executed in the order they arrive. Simple but can cause the
-      <em>convoy effect</em> where short processes wait behind long ones.<br><br>
-      <strong>Non-preemptive.</strong> No priority consideration.
+  <div>
+    <div class="section-title">📈 Live Stats</div>
+    <div id="liveStats" style="display:flex;flex-direction:column;gap:5px">
+      <div class="flex justify-between text-sm"><span class="text-muted">Context Switches</span><strong id="statCtx">—</strong></div>
+      <div class="flex justify-between text-sm"><span class="text-muted">CPU Utilization</span><strong id="statUtil">—</strong></div>
+      <div class="flex justify-between text-sm"><span class="text-muted">Throughput</span><strong id="statThru">—</strong></div>
+      <div class="flex justify-between text-sm"><span class="text-muted">Idle Time</span><strong id="statIdle">—</strong></div>
     </div>
-  </aside>
+  </div>
+
+  <hr>
+
+  <div id="agingInfoBox" style="display:none">
+    <div class="section-title">🕐 Aging Log</div>
+    <div id="agingLog" style="font-size:.75rem;max-height:120px;overflow-y:auto;color:var(--muted)"></div>
+  </div>
+
+  <div id="starvInfoBox" style="display:none">
+    <div class="section-title">⚠ Starvation Warnings</div>
+    <div id="starvLog" style="font-size:.75rem;color:var(--accent-3)"></div>
+  </div>
+
+  <hr>
+
+  <div>
+    <div class="section-title">Quiz Score</div>
+    <div id="quizScore" style="font-size:.85rem; color:var(--muted)">Quiz mode is off.</div>
+  </div>
+
+</aside>
+</div>
+
+<!-- ══════════ COMPARISON SECTION ═══════════════════════ -->
+<div class="comparison-section" id="comparisonSection" style="display:none">
+  <div class="section-title" style="margin-bottom:12px">Algorithm Comparison (same input)</div>
+  <div class="table-wrap">
+    <table class="comp-table">
+      <thead><tr><th>Algorithm</th><th>Avg WT</th><th>Avg TAT</th><th>Avg RT</th><th>CPU Util%</th><th>Ctx Switches</th><th>Avg WT Bar</th></tr></thead>
+      <tbody id="compTableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══════════ QUIZ OVERLAY ══════════════════════════════ -->
+<div class="quiz-overlay hidden" id="quizOverlay">
+  <div class="quiz-card">
+    <div class="quiz-q" id="quizQ">Which process runs next?</div>
+    <div class="quiz-options" id="quizOpts"></div>
+    <div class="quiz-result hidden" id="quizResultBox"></div>
+    <div class="flex gap-2 justify-between items-center">
+      <div class="quiz-score" id="quizScoreBox">Score: 0/0</div>
+      <div>
+        <button class="btn btn-secondary btn-sm" id="quizSkipBtn">Skip</button>
+        <button class="btn btn-primary btn-sm hidden" id="quizContinueBtn">Continue →</button>
+        <button class="btn btn-primary btn-sm hidden" id="quizSubmitBtn">Submit</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
-// ── Theme ────────────────────────────────────────────────
-const themeBtn = document.getElementById('themeBtn');
-const root = document.documentElement;
-const saved = localStorage.getItem('os-theme') || 'light';
-root.setAttribute('data-theme', saved);
-themeBtn.textContent = saved === 'dark' ? '☀️' : '🌙';
-themeBtn.addEventListener('click', () => {
-  const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-  root.setAttribute('data-theme', next);
-  themeBtn.textContent = next === 'dark' ? '☀️' : '🌙';
-  localStorage.setItem('os-theme', next);
-});
-
-// ── Process Colors ────────────────────────────────────────
+// ══════════════════════════════════════════════════════════
+// CONSTANTS & CONFIG
+// ══════════════════════════════════════════════════════════
 const COLORS = ['#1673c7','#d85f3f','#22a06b','#7c5bb0','#ef9c00','#0f9f9a','#db2777','#65a30d'];
+const STATE_COLORS = { not_arrived:'#b0bec5', ready:'#1673c7', running:'#22a06b', completed:'#78909c' };
 const ALGO_NAMES = {
-  fcfs: 'First Come First Served (FCFS)',
-  sjf: 'Shortest Job First — Non-Preemptive (SJF)',
-  srtf: 'Shortest Remaining Time First — Preemptive (SRTF)',
-  rr: 'Round Robin (RR)',
-  priority_np: 'Priority Scheduling — Non-Preemptive',
-  priority_p: 'Priority Scheduling — Preemptive'
+  fcfs:'First Come First Served (FCFS)',
+  sjf:'Shortest Job First — Non-Preemptive (SJF)',
+  srtf:'Shortest Remaining Time First — Preemptive (SRTF)',
+  rr:'Round Robin (RR)',
+  priority_np:'Priority Scheduling — Non-Preemptive',
+  priority_p:'Priority Scheduling — Preemptive'
 };
-const ALGO_INFO = {
-  fcfs: '<strong style="color:var(--ink)">FCFS</strong> — First Come First Served<br><br>Processes execute in arrival order. Simple but causes the <em>convoy effect</em>.<br><br><strong>Non-preemptive.</strong>',
-  sjf: '<strong style="color:var(--ink)">SJF</strong> — Shortest Job First<br><br>Always picks the arrived process with shortest burst. Minimizes average waiting time (optimal for NP).<br><br><strong>Non-preemptive.</strong>',
-  srtf: '<strong style="color:var(--ink)">SRTF</strong> — Shortest Remaining Time First<br><br>Preemptive version of SJF. At each time unit picks the process with least remaining time. Optimal average waiting time.<br><br><strong>Preemptive.</strong>',
-  rr: '<strong style="color:var(--ink)">Round Robin</strong><br><br>Each process gets a fixed time quantum. Fairness guaranteed; response time depends on quantum size. Best for interactive systems.<br><br><strong>Preemptive.</strong>',
-  priority_np: '<strong style="color:var(--ink)">Priority Scheduling NP</strong><br><br>Non-preemptively selects highest-priority ready process (lower number = higher priority). Risk of <em>starvation</em> for low-priority processes.<br><br><strong>Non-preemptive.</strong>',
-  priority_p: '<strong style="color:var(--ink)">Priority Scheduling P</strong><br><br>Preempts running process if a higher-priority process arrives. More responsive but more context switches.<br><br><strong>Preemptive.</strong>'
+const ALGO_DESC = {
+  fcfs:'Processes execute in arrival order. Simple and fair by arrival, but can cause the <em>convoy effect</em> where short processes wait behind long ones. <strong>Non-preemptive.</strong>',
+  sjf:'At each decision point, selects the arrived process with the <strong>shortest burst time</strong>. Optimal average waiting time among NP algorithms, but requires knowing burst times. <strong>Non-preemptive.</strong>',
+  srtf:'Preemptive SJF. At every tick, the process with the <strong>shortest remaining time</strong> runs. New arrivals can preempt. Optimal average waiting time but high context switches. <strong>Preemptive.</strong>',
+  rr:'Each process gets a fixed <strong>time quantum</strong>. After quantum expires, it re-enters the queue. Fair, good response time, suitable for interactive systems. <strong>Preemptive.</strong>',
+  priority_np:'At each decision point, selects the arrived process with <strong>highest priority</strong> (lowest number). Risk of <em>starvation</em>. <strong>Non-preemptive.</strong>',
+  priority_p:'At every tick, the highest-priority arrived process runs, preempting lower-priority ones. Optional aging prevents starvation. <strong>Preemptive.</strong>'
+};
+const RQ_NOTES = {
+  fcfs:'(arrival order)', sjf:'(sorted: shortest burst first)', srtf:'(sorted: shortest remaining first)',
+  rr:'(queue order + quantum)', priority_np:'(sorted: highest priority first)', priority_p:'(sorted: highest priority first)'
 };
 
-// ── State ─────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════
+// GLOBAL STATE
+// ══════════════════════════════════════════════════════════
 let currentAlgo = 'fcfs';
 let processes = [];
-let ganttData = [];
-let steps = [];
-let currentStep = 0;
+let pidCounter = 1;
+let timeline = [];
+let currentTick = 0;
 let playInterval = null;
 let speedFactor = 1;
-let pidCounter = 1;
+let playing = false;
+let teachMode = false;
+let quizMode = false;
+let compareMode = false;
+let quizCorrect = 0, quizTotal = 0;
+let pendingQuizTick = -1;
+let pendingQuizAnswer = null;
 
-// ── Init ──────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════
+// THEME
+// ══════════════════════════════════════════════════════════
+const themeBtn = document.getElementById('themeBtn');
+const root = document.documentElement;
+(function(){ const s = localStorage.getItem('os-theme')||'light'; root.setAttribute('data-theme',s); themeBtn.textContent=s==='dark'?'☀️':'🌙'; })();
+themeBtn.onclick = () => {
+  const n = root.getAttribute('data-theme')==='dark'?'light':'dark';
+  root.setAttribute('data-theme',n); themeBtn.textContent=n==='dark'?'☀️':'🌙';
+  localStorage.setItem('os-theme',n);
+};
+
+// ══════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════
 function init() {
   processes = [
-    { pid: 1, arrival: 0, burst: 5, priority: 2, color: COLORS[0] },
-    { pid: 2, arrival: 1, burst: 3, priority: 1, color: COLORS[1] },
-    { pid: 3, arrival: 2, burst: 8, priority: 3, color: COLORS[2] },
-    { pid: 4, arrival: 3, burst: 2, priority: 1, color: COLORS[3] },
+    {pid:1,arrival:0,burst:6,priority:3,color:COLORS[0]},
+    {pid:2,arrival:1,burst:4,priority:1,color:COLORS[1]},
+    {pid:3,arrival:2,burst:2,priority:4,color:COLORS[2]},
+    {pid:4,arrival:4,burst:5,priority:2,color:COLORS[3]},
   ];
   pidCounter = 5;
   renderTable();
+  updateAlgoUI();
 }
 
-function renderTable() {
+// ══════════════════════════════════════════════════════════
+// PROCESS TABLE
+// ══════════════════════════════════════════════════════════
+function renderTable(states) {
   const body = document.getElementById('procBody');
-  const showPri = currentAlgo === 'priority_np' || currentAlgo === 'priority_p';
-  document.getElementById('priHead').classList.toggle('hidden', !showPri);
-  body.innerHTML = processes.map((p, i) => `
-    <tr class="process-row" data-idx="${i}">
-      <td><span class="pid-badge p-color-${i % 8}">P${p.pid}</span></td>
-      <td><input type="number" value="${p.arrival}" min="0" max="50" onchange="updateProc(${i},'arrival',this.value)"></td>
-      <td><input type="number" value="${p.burst}" min="1" max="30" onchange="updateProc(${i},'burst',this.value)"></td>
-      <td class="${showPri ? '' : 'hidden'}"><input type="number" value="${p.priority}" min="1" max="10" onchange="updateProc(${i},'priority',this.value)"></td>
+  const showPri = currentAlgo==='priority_np'||currentAlgo==='priority_p';
+  document.getElementById('priHead').classList.toggle('hidden',!showPri);
+  body.innerHTML = processes.map((p,i) => {
+    const st = states ? states[p.pid] : 'not_arrived';
+    const stClass = st==='running'?'state-running':st==='ready'?'state-ready':st==='completed'?'state-done':'';
+    return `<tr class="proc-row ${stClass}" id="row-${p.pid}">
+      <td><span class="state-indicator si-${st||'not_arrived'}"></span></td>
+      <td><span class="state-chip" style="background:${p.color}">P${p.pid}</span></td>
+      <td>
+        <input type="number" value="${p.arrival}" min="0" max="99" onchange="updateProc(${i},'arrival',this)" class="proc-field">
+      </td>
+      <td>
+        <input type="number" value="${p.burst}" min="1" max="50" onchange="updateProc(${i},'burst',this)" class="proc-field">
+      </td>
+      <td class="${showPri?'':'hidden'}">
+        <input type="number" value="${p.priority||1}" min="1" max="10" onchange="updateProc(${i},'priority',this)" class="proc-field">
+        ${states && (currentAlgo==='priority_np'||currentAlgo==='priority_p') && timeline.length>0 ? getEffPriLabel(p.pid) : ''}
+      </td>
       <td><button class="btn btn-ghost btn-icon btn-sm" onclick="removeProc(${i})">✕</button></td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
 }
 
-function updateProc(i, field, val) {
-  processes[i][field] = parseInt(val) || 0;
-}
-function removeProc(i) {
-  if (processes.length <= 1) return;
-  processes.splice(i, 1);
-  renderTable();
+function getEffPriLabel(pid) {
+  const tick = timeline[currentTick];
+  if (!tick || !tick.effectivePriority) return '';
+  const ep = tick.effectivePriority[pid];
+  const base = processes.find(p=>p.pid===pid)?.priority||1;
+  if (ep !== base) return `<span class="aging-badge">→${ep}</span>`;
+  return '';
 }
 
-document.getElementById('addProcBtn').addEventListener('click', () => {
-  if (processes.length >= 8) return;
-  processes.push({ pid: pidCounter++, arrival: 0, burst: 4, priority: 2, color: COLORS[processes.length % 8] });
+function updateProc(i, field, el) {
+  const val = parseInt(el.value);
+  el.classList.remove('invalid-field');
+  if (field==='burst' && (isNaN(val)||val<1)) { el.classList.add('invalid-field'); return; }
+  if (field==='arrival' && (isNaN(val)||val<0)) { el.classList.add('invalid-field'); return; }
+  processes[i][field] = isNaN(val)?0:val;
+}
+
+function removeProc(i) { if(processes.length>1){processes.splice(i,1);renderTable();} }
+
+document.getElementById('addProcBtn').onclick = () => {
+  if(processes.length>=8)return;
+  processes.push({pid:pidCounter++,arrival:0,burst:4,priority:2,color:COLORS[processes.length%8]});
   renderTable();
+};
+document.getElementById('clearAllBtn').onclick = () => {
+  processes=[]; pidCounter=1; renderTable(); resetViz();
+};
+
+// ══════════════════════════════════════════════════════════
+// ALGORITHM TABS
+// ══════════════════════════════════════════════════════════
+document.querySelectorAll('.algo-tab').forEach(tab => {
+  tab.onclick = () => {
+    document.querySelectorAll('.algo-tab').forEach(t=>t.classList.remove('active'));
+    tab.classList.add('active');
+    currentAlgo = tab.dataset.algo;
+    updateAlgoUI();
+  };
 });
 
-document.getElementById('randomBtn').addEventListener('click', () => {
-  processes = [];
-  pidCounter = 1;
-  const n = 4 + Math.floor(Math.random() * 3);
-  for (let i = 0; i < n; i++) {
-    processes.push({
-      pid: pidCounter++,
-      arrival: Math.floor(Math.random() * 8),
-      burst: 1 + Math.floor(Math.random() * 9),
-      priority: 1 + Math.floor(Math.random() * 5),
-      color: COLORS[i % 8]
+function updateAlgoUI() {
+  document.getElementById('algoDesc').innerHTML = ALGO_DESC[currentAlgo];
+  document.getElementById('quantumOpt').classList.toggle('hidden', currentAlgo!=='rr');
+  document.getElementById('agingOpt').classList.toggle('hidden', !currentAlgo.startsWith('priority'));
+  document.getElementById('rqAlgoNote').textContent = RQ_NOTES[currentAlgo];
+  document.getElementById('priHead').classList.toggle('hidden', !currentAlgo.startsWith('priority'));
+  document.getElementById('ganttTitle').textContent = `Gantt Chart — ${ALGO_NAMES[currentAlgo]}`;
+}
+
+document.getElementById('agingCheck').onchange = function() {
+  document.getElementById('agingParams').classList.toggle('hidden', !this.checked);
+};
+
+// ══════════════════════════════════════════════════════════
+// SIMULATION ENGINE — TICK BY TICK
+// ══════════════════════════════════════════════════════════
+function simulate(inputProcs, algo, opts={}) {
+  const quantum = parseInt(opts.quantum)||2;
+  const agingEnabled = opts.aging||false;
+  const agingInterval = parseInt(opts.agingInterval)||5;
+
+  const n = inputProcs.length;
+  if (!n) return [];
+
+  // Deep-clone with runtime fields
+  const procs = inputProcs.map(p => ({
+    pid:p.pid, arrival:p.arrival, burst:p.burst, priority:p.priority||1, color:p.color,
+    rem:p.burst, startTime:-1, completionTime:-1,
+    effectivePriority:p.priority||1,
+    waitedSinceLastRun:0
+  }));
+  const byPid = {};
+  procs.forEach(p=>byPid[p.pid]=p);
+
+  const maxT = procs.reduce((s,p)=>s+p.burst,0) + Math.max(...procs.map(p=>p.arrival)) + 3;
+  const tl = [];
+  const completed = new Set();
+  let runningPid = null;
+  let prevRunningPid = null;
+  let contextSwitches = 0;
+
+  // RR state
+  let rrQueue = [];
+  let rrQuantumLeft = 0;
+
+  // Starvation tracking
+  const waitStart = {};
+  procs.forEach(p=>waitStart[p.pid]=-1);
+  const totalWaited = {};
+  procs.forEach(p=>totalWaited[p.pid]=0);
+  const avgBurst = procs.reduce((s,p)=>s+p.burst,0)/n;
+  const starvThresh = Math.max(15, avgBurst*3);
+
+  // Aging
+  const agingEvents = [];
+  const effectivePri = {};
+  procs.forEach(p=>effectivePri[p.pid]=p.priority);
+
+  for (let t=0; t<=maxT; t++) {
+    if (completed.size===n) break;
+
+    let reason='', reasonType='continue', isNewDecision=false;
+    const arriving=[], completing=[];
+    let rrReQueuedPid=null, ctxSwitch=false;
+
+    // 1. Handle arrivals
+    procs.forEach(p=>{
+      if(p.arrival===t && !completed.has(p.pid)){
+        arriving.push(p.pid);
+        if(algo==='rr' && !rrQueue.includes(p.pid) && p.pid!==runningPid) rrQueue.push(p.pid);
+      }
+    });
+
+    // 2. Check completion from last tick
+    if(runningPid!==null){
+      const rp=byPid[runningPid];
+      if(rp.rem===0){
+        rp.completionTime=t;
+        completed.add(runningPid);
+        completing.push(runningPid);
+        runningPid=null; prevRunningPid=null;
+      }
+    }
+
+    // 3. Algorithm-specific scheduling
+    if(algo==='rr'){
+      // Check quantum expiry (before selecting next)
+      if(runningPid!==null && rrQuantumLeft===0 && !completed.has(runningPid)){
+        // Re-enter queue
+        rrQueue.push(runningPid);
+        rrReQueuedPid=runningPid;
+        runningPid=null;
+      }
+      if(runningPid===null && rrQueue.length>0){
+        const oldRun=prevRunningPid;
+        runningPid=rrQueue.shift();
+        rrQuantumLeft=quantum;
+        if(byPid[runningPid].startTime===-1) byPid[runningPid].startTime=t;
+        isNewDecision=true;
+        const prevStr = rrReQueuedPid ? `P${rrReQueuedPid} re-enters queue after quantum. ` : '';
+        reason = `${prevStr}P${runningPid} dequeued from ready queue. Quantum=${quantum}.`;
+        reasonType = rrReQueuedPid ? 'rr-requeue' : 'select';
+        if(oldRun!==runningPid){ contextSwitches++; ctxSwitch=true; }
+      } else if(runningPid===null){
+        reason='CPU idle — ready queue empty';
+        reasonType='idle';
+      }
+    }
+    else if(algo==='fcfs'){
+      if(runningPid===null){
+        const ready=getReady(procs,completed,t);
+        ready.sort((a,b)=>a.arrival-b.arrival||a.pid-b.pid);
+        if(ready.length>0){
+          const sel=ready[0];
+          reason=makeFCFSReason(sel, ready, t);
+          reasonType='select'; isNewDecision=true;
+          runningPid=sel.pid;
+          if(sel.startTime===-1) sel.startTime=t;
+          contextSwitches++; ctxSwitch=true;
+        } else { reason='CPU idle — no processes ready'; reasonType='idle'; }
+      }
+    }
+    else if(algo==='sjf'){
+      if(runningPid===null){
+        const ready=getReady(procs,completed,t);
+        ready.sort((a,b)=>a.burst-b.burst||a.arrival-b.arrival||a.pid-b.pid);
+        if(ready.length>0){
+          const sel=ready[0];
+          reason=makeSJFReason(sel, ready);
+          reasonType='select'; isNewDecision=true;
+          runningPid=sel.pid;
+          if(sel.startTime===-1) sel.startTime=t;
+          contextSwitches++; ctxSwitch=true;
+        } else { reason='CPU idle — no processes ready'; reasonType='idle'; }
+      }
+    }
+    else if(algo==='srtf'){
+      // Preemptive: at every tick check if a shorter process is available
+      const ready=getReady(procs,completed,t);
+      if(runningPid!==null) ready.push(byPid[runningPid]); // include running
+      ready.sort((a,b)=>a.rem-b.rem||a.arrival-b.arrival||a.pid-b.pid);
+      const best = ready.length>0 ? ready[0] : null;
+      if(best && best.pid!==runningPid){
+        const oldRun=runningPid;
+        runningPid=best.pid;
+        if(best.startTime===-1) best.startTime=t;
+        isNewDecision=true;
+        if(oldRun!==null){
+          reason=`P${runningPid} preempts P${oldRun}: rem=${best.rem} < P${oldRun} rem=${byPid[oldRun].rem}`;
+          reasonType='preempt';
+        } else {
+          reason=makeSRTFSelectReason(best, ready.filter(x=>x.pid!==best.pid));
+          reasonType='select';
+        }
+        if(oldRun!==runningPid){ contextSwitches++; ctxSwitch=true; }
+      } else if(!best){
+        runningPid=null; reason='CPU idle'; reasonType='idle';
+      }
+    }
+    else if(algo==='priority_np'){
+      // Aging
+      if(agingEnabled && t>0){
+        getReady(procs,completed,t).forEach(p=>{
+          if(p.pid!==runningPid){
+            if(!waitStart[p.pid]||waitStart[p.pid]===-1) waitStart[p.pid]=t;
+            const waited=t-waitStart[p.pid];
+            if(waited>0 && waited%agingInterval===0){
+              const old=effectivePri[p.pid];
+              effectivePri[p.pid]=Math.max(1,effectivePri[p.pid]-1);
+              if(effectivePri[p.pid]!==old){
+                agingEvents.push({t,pid:p.pid,oldPri:old,newPri:effectivePri[p.pid]});
+              }
+            }
+          }
+        });
+      }
+      if(runningPid===null){
+        const ready=getReady(procs,completed,t);
+        ready.sort((a,b)=>effectivePri[a.pid]-effectivePri[b.pid]||a.arrival-b.arrival||a.pid-b.pid);
+        if(ready.length>0){
+          const sel=ready[0];
+          reason=makePriNPReason(sel, ready, effectivePri);
+          reasonType='select'; isNewDecision=true;
+          runningPid=sel.pid;
+          if(sel.startTime===-1) sel.startTime=t;
+          if(waitStart[sel.pid]) waitStart[sel.pid]=-1;
+          contextSwitches++; ctxSwitch=true;
+        } else { reason='CPU idle'; reasonType='idle'; }
+      }
+    }
+    else if(algo==='priority_p'){
+      // Aging
+      if(agingEnabled && t>0){
+        getReady(procs,completed,t).forEach(p=>{
+          if(p.pid!==runningPid){
+            if(!waitStart[p.pid]||waitStart[p.pid]===-1) waitStart[p.pid]=t;
+            const waited=t-waitStart[p.pid];
+            if(waited>0 && waited%agingInterval===0){
+              const old=effectivePri[p.pid];
+              effectivePri[p.pid]=Math.max(1,effectivePri[p.pid]-1);
+              if(effectivePri[p.pid]!==old){
+                agingEvents.push({t,pid:p.pid,oldPri:old,newPri:effectivePri[p.pid]});
+              }
+            }
+          }
+        });
+      }
+      // Preemptive priority
+      const ready=getReady(procs,completed,t);
+      if(runningPid!==null) ready.push(byPid[runningPid]);
+      ready.sort((a,b)=>effectivePri[a.pid]-effectivePri[b.pid]||a.arrival-b.arrival||a.pid-b.pid);
+      const best=ready.length>0?ready[0]:null;
+      if(best && best.pid!==runningPid){
+        const oldRun=runningPid;
+        runningPid=best.pid;
+        if(best.startTime===-1) best.startTime=t;
+        isNewDecision=true;
+        if(oldRun!==null){
+          reason=`P${runningPid} preempts P${oldRun}: pri(eff)=${effectivePri[best.pid]} < ${effectivePri[oldRun]}`;
+          reasonType='preempt';
+        } else {
+          reason=makePriNPReason(best, ready.filter(x=>x.pid!==best.pid), effectivePri);
+          reasonType='select';
+        }
+        if(oldRun!==runningPid){ contextSwitches++; ctxSwitch=true; }
+        if(runningPid && waitStart[runningPid]) waitStart[runningPid]=-1;
+      } else if(!best){
+        runningPid=null; reason='CPU idle'; reasonType='idle';
+      }
+    }
+
+    // Compute wait times + starvation
+    const waitTimes={}, starvWarnings=[];
+    procs.forEach(p=>{
+      if(!completed.has(p.pid) && p.arrival<=t && p.pid!==runningPid){
+        if(!waitStart[p.pid]||waitStart[p.pid]===-1) waitStart[p.pid]=t;
+        totalWaited[p.pid]=(totalWaited[p.pid]||0)+1;
+        waitTimes[p.pid]=totalWaited[p.pid];
+        if(totalWaited[p.pid]>=starvThresh && algo.startsWith('priority')) starvWarnings.push(p.pid);
+      } else {
+        waitStart[p.pid]=-1;
+      }
+    });
+
+    // Compute process states
+    const procStates={};
+    procs.forEach(p=>{
+      if(completed.has(p.pid)) procStates[p.pid]='completed';
+      else if(runningPid===p.pid) procStates[p.pid]='running';
+      else if(p.arrival<=t) procStates[p.pid]='ready';
+      else procStates[p.pid]='not_arrived';
+    });
+
+    // Ready queue for display
+    const readyDisplay = getReadyDisplayQueue(procs, completed, runningPid, t, algo, rrQueue, effectivePri);
+
+    tl.push({
+      t,
+      running: runningPid,
+      readyQueue: readyDisplay,
+      arriving, completing,
+      reason, reasonType, isNewDecision,
+      ctxSwitch,
+      remaining: Object.fromEntries(procs.map(p=>[p.pid,p.rem])),
+      startTimes: Object.fromEntries(procs.map(p=>[p.pid,p.startTime])),
+      completionTimes: Object.fromEntries(procs.filter(p=>completed.has(p.pid)).map(p=>[p.pid,p.completionTime])),
+      processStates: procStates,
+      effectivePriority: {...effectivePri},
+      waitTimes,
+      starvWarnings:[...starvWarnings],
+      rrQuantumLeft: algo==='rr'?rrQuantumLeft:0,
+      rrReQueuedPid,
+      contextSwitches,
+    });
+
+    prevRunningPid = runningPid;
+
+    // Execute tick
+    if(runningPid!==null){
+      byPid[runningPid].rem--;
+      if(algo==='rr') rrQuantumLeft--;
+    }
+
+    // Collect arrivals for RR
+    if(algo==='rr' && arriving.length>0 && t>0){
+      // Already handled at top
+    }
+  }
+
+  // Store aging events in timeline metadata
+  tl._agingEvents = agingEvents;
+  return tl;
+}
+
+function getReady(procs, completed, t) {
+  return procs.filter(p=>p.arrival<=t && !completed.has(p.pid));
+}
+
+function getReadyDisplayQueue(procs, completed, runningPid, t, algo, rrQueue, effectivePri) {
+  if(algo==='rr'){
+    return rrQueue.filter(pid=>!completed.has(pid)).map(pid=>{
+      const p=procs.find(x=>x.pid===pid);
+      return {pid, rem:p?p.rem:0, info:`rem:${p?p.rem:0}`};
     });
   }
-  renderTable();
-});
-
-// ── Algorithm Selection ───────────────────────────────────
-document.querySelectorAll('.algo-option').forEach(el => {
-  el.addEventListener('click', () => {
-    document.querySelectorAll('.algo-option').forEach(x => x.classList.remove('selected'));
-    el.classList.add('selected');
-    currentAlgo = el.dataset.algo;
-    document.getElementById('quantumRow').classList.toggle('hidden', currentAlgo !== 'rr');
-    document.getElementById('algoLabel').textContent = ALGO_NAMES[currentAlgo];
-    document.getElementById('algoInfo').innerHTML = ALGO_INFO[currentAlgo];
-    renderTable();
-  });
-});
-
-// ── Algorithms ────────────────────────────────────────────
-function computeFCFS(procs) {
-  const sorted = [...procs].sort((a, b) => a.arrival - b.arrival || a.pid - b.pid);
-  const gantt = []; let t = 0;
-  for (const p of sorted) {
-    if (t < p.arrival) gantt.push({ pid: -1, start: t, end: p.arrival });
-    gantt.push({ pid: p.pid, start: Math.max(t, p.arrival), end: Math.max(t, p.arrival) + p.burst });
-    t = gantt[gantt.length - 1].end;
-  }
-  return gantt;
-}
-
-function computeSJF(procs) {
-  const all = procs.map(p => ({ ...p }));
-  const gantt = []; let t = 0; const done = new Set();
-  while (done.size < all.length) {
-    const avail = all.filter(p => p.arrival <= t && !done.has(p.pid));
-    if (!avail.length) { t++; continue; }
-    avail.sort((a, b) => a.burst - b.burst || a.arrival - b.arrival || a.pid - b.pid);
-    const p = avail[0];
-    if (t < p.arrival) gantt.push({ pid: -1, start: t, end: p.arrival });
-    gantt.push({ pid: p.pid, start: t, end: t + p.burst });
-    t += p.burst; done.add(p.pid);
-  }
-  return gantt;
-}
-
-function computeSRTF(procs) {
-  const all = procs.map(p => ({ ...p, rem: p.burst, resp: -1 }));
-  const n = all.length; let done = 0; let t = 0;
-  let cur = null; let segStart = 0; const gantt = [];
-  while (done < n) {
-    const avail = all.filter(p => p.arrival <= t && p.rem > 0);
-    if (!avail.length) { if (cur) { gantt.push({ pid: cur.pid, start: segStart, end: t }); cur = null; } t++; continue; }
-    avail.sort((a, b) => a.rem - b.rem || a.arrival - b.arrival || a.pid - b.pid);
-    const next = avail[0];
-    if (!cur || cur.pid !== next.pid) {
-      if (cur) gantt.push({ pid: cur.pid, start: segStart, end: t });
-      segStart = t; cur = next;
-    }
-    next.rem--; t++;
-    if (next.rem === 0) { gantt.push({ pid: next.pid, start: segStart, end: t }); cur = null; segStart = t; done++; }
-  }
-  return gantt;
-}
-
-function computeRR(procs, q) {
-  const all = procs.map(p => ({ ...p, rem: p.burst })).sort((a, b) => a.arrival - b.arrival);
-  const gantt = []; let t = 0; const queue = []; let idx = 0;
-  while (idx < all.length && all[idx].arrival <= t) { queue.push(all[idx++]); }
-  while (queue.length || idx < all.length) {
-    if (!queue.length) { t = all[idx].arrival; queue.push(all[idx++]); }
-    const p = queue.shift();
-    const exec = Math.min(q, p.rem);
-    gantt.push({ pid: p.pid, start: t, end: t + exec });
-    t += exec; p.rem -= exec;
-    while (idx < all.length && all[idx].arrival <= t) { queue.push(all[idx++]); }
-    if (p.rem > 0) queue.push(p);
-  }
-  return gantt;
-}
-
-function computePriorityNP(procs) {
-  const all = procs.map(p => ({ ...p }));
-  const gantt = []; let t = 0; const done = new Set();
-  while (done.size < all.length) {
-    const avail = all.filter(p => p.arrival <= t && !done.has(p.pid));
-    if (!avail.length) { t++; continue; }
-    avail.sort((a, b) => a.priority - b.priority || a.arrival - b.arrival || a.pid - b.pid);
-    const p = avail[0];
-    gantt.push({ pid: p.pid, start: t, end: t + p.burst });
-    t += p.burst; done.add(p.pid);
-  }
-  return gantt;
-}
-
-function computePriorityP(procs) {
-  const all = procs.map(p => ({ ...p, rem: p.burst }));
-  const n = all.length; let done = 0; let t = 0;
-  let cur = null; let segStart = 0; const gantt = [];
-  while (done < n) {
-    const avail = all.filter(p => p.arrival <= t && p.rem > 0);
-    if (!avail.length) { if (cur) { gantt.push({ pid: cur.pid, start: segStart, end: t }); cur = null; } t++; continue; }
-    avail.sort((a, b) => a.priority - b.priority || a.arrival - b.arrival || a.pid - b.pid);
-    const next = avail[0];
-    if (!cur || cur.pid !== next.pid) {
-      if (cur) gantt.push({ pid: cur.pid, start: segStart, end: t });
-      segStart = t; cur = next;
-    }
-    next.rem--; t++;
-    if (next.rem === 0) { gantt.push({ pid: next.pid, start: segStart, end: t }); cur = null; segStart = t; done++; }
-  }
-  return gantt;
-}
-
-function computeGantt() {
-  const q = parseInt(document.getElementById('quantum').value) || 2;
-  const cleaned = processes.filter(p => p.burst > 0);
-  switch (currentAlgo) {
-    case 'fcfs': return computeFCFS(cleaned);
-    case 'sjf': return computeSJF(cleaned);
-    case 'srtf': return computeSRTF(cleaned);
-    case 'rr': return computeRR(cleaned, q);
-    case 'priority_np': return computePriorityNP(cleaned);
-    case 'priority_p': return computePriorityP(cleaned);
-  }
-  return [];
-}
-
-// ── Metrics ───────────────────────────────────────────────
-function computeMetrics(gantt, procs) {
-  const map = {};
-  procs.forEach(p => { map[p.pid] = { ...p, completion: 0, response: -1, firstStart: -1 }; });
-  gantt.forEach(seg => {
-    if (seg.pid < 0) return;
-    const p = map[seg.pid];
-    if (!p) return;
-    if (p.firstStart < 0) p.firstStart = seg.start;
-    p.completion = Math.max(p.completion, seg.end);
-  });
-  return Object.values(map).map(p => ({
-    ...p,
-    turnaround: p.completion - p.arrival,
-    waiting: p.completion - p.arrival - p.burst,
-    response: p.firstStart - p.arrival
+  const ready = procs.filter(p=>p.arrival<=t && !completed.has(p.pid) && p.pid!==runningPid);
+  if(algo==='sjf') ready.sort((a,b)=>a.burst-b.burst||a.arrival-b.arrival||a.pid-b.pid);
+  else if(algo==='srtf') ready.sort((a,b)=>a.rem-b.rem||a.arrival-b.arrival||a.pid-b.pid);
+  else if(algo==='priority_np'||algo==='priority_p') ready.sort((a,b)=>effectivePri[a.pid]-effectivePri[b.pid]||a.arrival-b.arrival||a.pid-b.pid);
+  else ready.sort((a,b)=>a.arrival-b.arrival||a.pid-b.pid);
+  return ready.map(p=>({
+    pid:p.pid,
+    rem:p.rem,
+    info: algo==='sjf'?`burst:${p.burst}` :
+          algo==='srtf'?`rem:${p.rem}` :
+          algo.startsWith('priority')?`pri:${effectivePri[p.pid]}${effectivePri[p.pid]!==p.priority?'(aged)':''}` :
+          `arr:${p.arrival}`
   }));
 }
 
-// ── Build Steps ───────────────────────────────────────────
-function buildSteps(gantt) {
-  // Each step = show up to that gantt segment
-  const s = [];
-  for (let i = 1; i <= gantt.length; i++) {
-    s.push({ visibleCount: i, time: gantt[i-1].end });
-  }
-  return s;
+// Reason builders
+function makeFCFSReason(sel, ready, t) {
+  if(ready.length===1) return `P${sel.pid} is the only ready process (arrived t=${sel.arrival})`;
+  const tie = ready.filter(r=>r.arrival===sel.arrival);
+  let r=`P${sel.pid} selected — arrived earliest (t=${sel.arrival})`;
+  if(tie.length>1) r+=` — tie broken by PID (P${sel.pid} < P${tie[1].pid})`;
+  return r;
+}
+function makeSJFReason(sel, ready) {
+  if(ready.length===1) return `P${sel.pid} is the only ready process (burst=${sel.burst})`;
+  const tie = ready.filter(r=>r.burst===sel.burst);
+  let r=`P${sel.pid} has shortest burst (${sel.burst} units)`;
+  if(ready.length>1) r+=` among ${ready.length} ready: [${ready.map(r=>`P${r.pid}:${r.burst}`).join(', ')}]`;
+  if(tie.length>1) r+=` — tie broken by arrival time`;
+  return r;
+}
+function makeSRTFSelectReason(sel, others) {
+  if(!others.length) return `P${sel.pid} is the only ready process (rem=${sel.rem})`;
+  return `P${sel.pid} selected: shortest remaining (${sel.rem}) among ready [${[sel,...others].map(r=>`P${r.pid}:${r.rem}`).join(', ')}]`;
+}
+function makePriNPReason(sel, ready, ep) {
+  const allInfo = [sel,...ready].map(r=>`P${r.pid}:pri${ep[r.pid]}`).join(', ');
+  let r=`P${sel.pid} selected: highest priority (${ep[sel.pid]})`;
+  if(ready.length>0) r+=` among [${allInfo}]`;
+  if(ready.length>0 && ep[sel.pid]===ep[ready[0]?.pid]) r+=` — tie broken by arrival time`;
+  return r;
 }
 
-// ── Render Gantt ──────────────────────────────────────────
-function renderGantt(gantt, visibleCount) {
-  const wrap = document.getElementById('ganttWrap');
-  if (!gantt.length) { wrap.innerHTML = '<div style="color:var(--muted);text-align:center;padding:24px">No data</div>'; return; }
+// ══════════════════════════════════════════════════════════
+// METRICS
+// ══════════════════════════════════════════════════════════
+function computeMetrics(procs, tl) {
+  const last = tl[tl.length-1];
+  const results = procs.map(p=>{
+    // Find completion time from timeline
+    let ct=-1, st=-1;
+    for(const tick of tl){
+      if(tick.startTimes[p.pid]!==-1 && st===-1) st=tick.startTimes[p.pid];
+      if(tick.completionTimes && tick.completionTimes[p.pid]) ct=tick.completionTimes[p.pid];
+    }
+    // Use completion time from last tick if available
+    const lastCt = last.completionTimes?.[p.pid];
+    if(lastCt) ct=lastCt;
+    // Try to find from all ticks
+    for(const tick of tl){
+      if(tick.completionTimes?.[p.pid]) ct=tick.completionTimes[p.pid];
+    }
+    const tat = ct>=0 ? ct-p.arrival : -1;
+    const wt = tat>=0 ? tat-p.burst : -1;
+    const rt = st>=0 ? st-p.arrival : -1;
+    return {pid:p.pid,arrival:p.arrival,burst:p.burst,color:p.color,ct,tat,wt,rt};
+  });
+  return results;
+}
 
-  const maxT = gantt[gantt.length - 1].end;
-  const scale = Math.min(1, (wrap.clientWidth - 60) / (maxT * 28));
-  const blockW = Math.max(18, 28 * scale);
+// ══════════════════════════════════════════════════════════
+// RENDERING
+// ══════════════════════════════════════════════════════════
+function buildGanttCells(tl, upToTick) {
+  if(!tl.length) return;
+  const tickW = 24;
+  const ganttInner = document.getElementById('ganttInner');
 
   // Per-process rows
-  const pidMap = {};
-  processes.forEach((p, i) => { pidMap[p.pid] = { color: p.color, idx: i }; });
+  const rows = {};
+  processes.forEach(p => rows[p.pid]=[]);
 
-  // Build row per process
-  const rowsHtml = processes.map((p, i) => {
-    const segs = gantt.filter(s => s.pid === p.pid);
-    const blocks = segs.slice(0, visibleCount).map(s => {
-      const left = s.start * blockW;
-      const width = (s.end - s.start) * blockW;
-      const isLast = gantt.indexOf(s) === visibleCount - 1;
-      return `<div class="gantt-block ${isLast ? 'current' : ''}"
-        style="left:${left}px; width:${width}px; background:${p.color}"
-        title="P${p.pid}: t=${s.start}–${s.end}">
-        ${width > 26 ? `<span style="font-size:0.68rem;font-weight:700">${s.end - s.start}</span>` : ''}
-      </div>`;
-    }).join('');
-    return `<div class="gantt-proc-row">
-      <div class="gantt-proc-label" style="background:${p.color}">P${p.pid}</div>
-      <div class="gantt-blocks" style="width:${maxT * blockW}px">${blocks}</div>
-    </div>`;
-  }).join('');
-
-  // Ticks
-  const tickStep = maxT <= 20 ? 1 : maxT <= 50 ? 5 : 10;
-  let ticks = '';
-  for (let t = 0; t <= maxT; t += tickStep) {
-    ticks += `<div class="t-tick" style="left:${t * blockW}px">${t}</div>`;
+  let prevPid = null;
+  for(let t=0; t<Math.min(upToTick, tl.length); t++){
+    const tick = tl[t];
+    processes.forEach(p=>{
+      const running = tick.running===p.pid;
+      rows[p.pid].push({
+        t, running,
+        ctxSwitch: tick.ctxSwitch && tick.running===p.pid && t>0,
+      });
+    });
   }
-  if (maxT % tickStep !== 0) ticks += `<div class="t-tick" style="left:${maxT * blockW}px">${maxT}</div>`;
 
-  wrap.innerHTML = `
-    <div class="gantt-rows" style="overflow-x:auto; padding-bottom:4px">
-      ${rowsHtml}
-      <div style="display:flex; gap:6px; margin-top:4px">
-        <div style="width:32px; flex-shrink:0"></div>
-        <div class="timeline-row" style="width:${maxT * blockW}px">${ticks}</div>
-      </div>
-    </div>
-  `;
+  // Arrival markers row
+  const maxT2 = Math.max(upToTick, 1);
+  const arrivals = {};
+  processes.forEach(p=>{
+    if(p.arrival < maxT2){
+      if(!arrivals[p.arrival]) arrivals[p.arrival]=[];
+      arrivals[p.arrival].push(p);
+    }
+  });
+
+  let arrivalHtml = `<div style="display:flex; margin-left:32px; position:relative; height:22px; min-width:${maxT2*tickW}px">`;
+  Object.entries(arrivals).forEach(([at,ps])=>{
+    const x = parseInt(at)*tickW;
+    ps.forEach((p,i)=>{
+      arrivalHtml+=`<div class="arrival-marker" style="left:${x+i*12}px">
+        <div class="arrival-flag" style="background:${p.color}">P${p.pid}</div>
+        <div class="arrival-line" style="color:${p.color}"></div>
+      </div>`;
+    });
+  });
+  arrivalHtml+='</div>';
+
+  // Process rows
+  let rowsHtml = '';
+  processes.forEach(p=>{
+    const cells = rows[p.pid].map(c=>{
+      const isCurrent = c.t===upToTick-1;
+      if(c.running){
+        return `<div class="gantt-cell ${isCurrent?'current-tick':''}" style="background:${p.color}; min-width:${tickW}px" title="P${p.pid} runs at t=${c.t}→${c.t+1}">
+          ${c.ctxSwitch?'<div class="ctx-switch-marker" title="Context switch"></div>':''}
+        </div>`;
+      } else {
+        // Check if this proc is idle (not running but arrived)
+        const arrivedByT = p.arrival<=c.t;
+        if(!arrivedByT) return `<div class="gantt-cell" style="background:var(--surface);border-color:var(--surface); min-width:${tickW}px"></div>`;
+        return `<div class="gantt-cell" style="background:var(--surface);border-color:var(--surface); min-width:${tickW}px"></div>`;
+      }
+    }).join('');
+    rowsHtml+=`<div class="gantt-main-row">
+      <div class="gantt-row-label" style="background:${p.color}">P${p.pid}</div>
+      <div class="gantt-cells">${cells}</div>
+    </div>`;
+  });
+
+  // CPU/Idle row
+  let cpuRow = `<div class="gantt-main-row">
+    <div class="gantt-row-label" style="background:#8899aa;font-size:.6rem">CPU</div>
+    <div class="gantt-cells">`;
+  for(let t=0;t<Math.min(upToTick,tl.length);t++){
+    const tick=tl[t];
+    const isCurrent = t===upToTick-1;
+    if(tick.running!==null){
+      const p=processes.find(x=>x.pid===tick.running);
+      const color=p?p.color:'#1673c7';
+      cpuRow+=`<div class="gantt-cell ${isCurrent?'current-tick':''}" style="background:${color};min-width:${tickW}px" title="P${tick.running} at t=${t}" >
+        ${tick.ctxSwitch?'<div class="ctx-switch-marker"></div>':''}
+      </div>`;
+    } else {
+      cpuRow+=`<div class="gantt-cell idle ${isCurrent?'current-tick':''}" style="min-width:${tickW}px" title="CPU idle at t=${t}"></div>`;
+    }
+  }
+  cpuRow+='</div></div>';
+
+  // Timeline ticks
+  let tickHtml=`<div class="gantt-timeline" style="padding-left:${32+tickW}px; min-width:${maxT2*tickW}px">`;
+  const step = maxT2<=20?1:maxT2<=50?5:10;
+  for(let t=0;t<=Math.min(upToTick,tl.length);t+=step){
+    tickHtml+=`<div class="t-label" style="position:relative;left:${(t-step)*tickW}px">${t}</div>`;
+  }
+  tickHtml+='</div>';
+
+  ganttInner.innerHTML = arrivalHtml + rowsHtml + cpuRow + tickHtml;
 
   // Legend
-  const leg = document.getElementById('ganttLegend');
-  leg.innerHTML = processes.map(p =>
-    `<div class="legend-item"><div class="legend-swatch" style="background:${p.color}"></div>P${p.pid}</div>`
-  ).join('');
+  const leg=document.getElementById('legendRow');
+  leg.innerHTML = processes.map(p=>`<div class="legend-item"><div class="legend-swatch" style="background:${p.color}"></div>P${p.pid}</div>`).join('');
+
+  // Auto-scroll to current tick
+  const scroll=document.getElementById('ganttScroll');
+  const curX=(upToTick-1)*tickW+32;
+  if(curX > scroll.clientWidth*0.7){
+    scroll.scrollLeft = curX - scroll.clientWidth*0.6;
+  }
 }
 
-// ── Run ───────────────────────────────────────────────────
-document.getElementById('runBtn').addEventListener('click', run);
-function run() {
-  stopPlay();
-  ganttData = computeGantt();
-  if (!ganttData.length) return;
-  steps = buildSteps(ganttData);
-  currentStep = steps.length;
-
-  renderGantt(ganttData, currentStep);
-  showMetrics();
-  document.getElementById('playbackBar').style.display = 'flex';
-  document.getElementById('metricsArea').style.display = 'block';
-  document.getElementById('timeBar').style.display = 'flex';
-  updatePlayback();
-  buildStepLog();
-  updateStatePanel(currentStep);
-}
-
-function showMetrics() {
-  const metrics = computeMetrics(ganttData, processes);
-  const grid = document.getElementById('metricsGrid');
-  const avgWT = (metrics.reduce((s, m) => s + m.waiting, 0) / metrics.length).toFixed(2);
-  const avgTAT = (metrics.reduce((s, m) => s + m.turnaround, 0) / metrics.length).toFixed(2);
-  const avgRT = (metrics.reduce((s, m) => s + m.response, 0) / metrics.length).toFixed(2);
-  const totalTime = ganttData[ganttData.length - 1].end;
-  const cpuBusy = ganttData.filter(s => s.pid >= 0).reduce((s, g) => s + g.end - g.start, 0);
-  const util = ((cpuBusy / totalTime) * 100).toFixed(1);
-
-  grid.innerHTML = `
-    <div class="metric-card"><div class="metric-value" style="color:var(--cpu-color)">${avgWT}</div><div class="metric-label">Avg Wait (ms)</div></div>
-    <div class="metric-card"><div class="metric-value" style="color:var(--mem-color)">${avgTAT}</div><div class="metric-label">Avg Turnaround</div></div>
-    <div class="metric-card"><div class="metric-value" style="color:var(--disk-color)">${avgRT}</div><div class="metric-label">Avg Response</div></div>
-    <div class="metric-card"><div class="metric-value" style="color:var(--deadlock-color)">${util}%</div><div class="metric-label">CPU Utilization</div></div>
-  `;
-
-  const body = document.getElementById('metricsBody');
-  body.innerHTML = metrics.map(m => `
-    <tr>
-      <td><span class="pid-badge" style="background:${m.color}">P${m.pid}</span></td>
-      <td>${m.arrival}</td><td>${m.burst}</td>
-      <td>${m.completion}</td>
-      <td><strong>${m.turnaround}</strong></td>
-      <td><strong style="color:var(--cpu-color)">${m.waiting}</strong></td>
-      <td>${m.response}</td>
-    </tr>
-  `).join('');
-
-  const foot = document.getElementById('metricsFoot');
-  const total = { tat: metrics.reduce((s, m) => s + m.turnaround, 0), wt: metrics.reduce((s, m) => s + m.waiting, 0) };
-  foot.innerHTML = `<tr><td colspan="4" style="color:var(--muted)">Average</td><td>${(total.tat/metrics.length).toFixed(2)}</td><td>${(total.wt/metrics.length).toFixed(2)}</td><td>—</td></tr>`;
-}
-
-// ── Playback ──────────────────────────────────────────────
-function updatePlayback() {
-  const cs = currentStep;
-  document.getElementById('stepCounter').textContent = `${cs} / ${steps.length}`;
-  const pct = steps.length ? (cs / steps.length * 100) : 0;
-  document.getElementById('progressFill').style.width = pct + '%';
-  const t = steps.length && cs > 0 ? steps[cs - 1].time : 0;
-  document.getElementById('timeVal').textContent = t;
-  renderGantt(ganttData, cs);
-  updateStatePanel(cs);
-  if (cs > 0 && cs <= steps.length) scrollLogToStep(cs - 1);
-}
-
-function buildStepLog() {
-  const log = document.getElementById('stepLog');
-  log.innerHTML = ganttData.map((seg, i) => {
-    const label = seg.pid < 0 ? 'CPU idle' : `P${seg.pid} runs`;
-    const cls = seg.pid < 0 ? 'warning' : 'success';
-    return `<div class="step-entry ${cls}" id="logEntry${i}">${label}: t=${seg.start} → t=${seg.end} <span style="color:var(--muted)">(${seg.end - seg.start} unit${seg.end - seg.start !== 1 ? 's' : ''})</span></div>`;
+function updateReadyQueue(tick) {
+  const slots = document.getElementById('readyQueueSlots');
+  if(!tick || !tick.readyQueue.length){
+    slots.innerHTML = `<span class="rq-empty">${tick&&tick.running?'Empty (CPU busy)':'Empty'}</span>`;
+    return;
+  }
+  slots.innerHTML = tick.readyQueue.map((item,i)=>{
+    const p = processes.find(x=>x.pid===item.pid);
+    const color=p?p.color:'#888';
+    const isRR = currentAlgo==='rr';
+    const quantumNote = isRR && i===0 ? `<span class="rq-proc-pos">next</span>` : `<span class="rq-proc-pos">${i+1}</span>`;
+    return `<div class="rq-proc" style="background:${color}">
+      ${quantumNote}<span>P${item.pid}</span>
+      <span class="rq-proc-info">${item.info}</span>
+    </div>${i<tick.readyQueue.length-1?'<span class="rq-arrow">→</span>':''}`;
   }).join('');
-}
-function scrollLogToStep(i) {
-  const el = document.getElementById(`logEntry${i}`);
-  if (el) { document.querySelectorAll('.step-entry').forEach(x => x.classList.remove('current')); el.classList.add('current'); el.scrollIntoView({ block: 'nearest' }); }
+
+  // Show running process
+  if(tick.running){
+    const rp=processes.find(p=>p.pid===tick.running);
+    const rrQ = tick.rrQuantumLeft>0 ? `<span class="rq-proc-info"> q:${tick.rrQuantumLeft}</span>` : '';
+    const runHtml=`<div class="rq-proc" style="background:var(--mem-color);margin-left:auto">⚙ P${tick.running}${rrQ} <span class="rq-proc-info">running</span></div>`;
+    slots.innerHTML = slots.innerHTML + '<span style="color:var(--muted); margin:0 4px">|</span>' + runHtml;
+  }
 }
 
-function updateStatePanel(cs) {
-  const panel = document.getElementById('statesPanel');
-  const metrics = computeMetrics(ganttData.slice(0, cs), processes);
-  const curTime = cs > 0 ? steps[cs - 1].time : 0;
-  const runningPid = cs > 0 && ganttData[cs - 1].pid >= 0 ? ganttData[cs - 1].pid : -1;
-  panel.innerHTML = processes.map(p => {
-    const m = metrics.find(x => x.pid === p.pid);
-    let state = 'not arrived';
-    if (p.arrival > curTime) state = 'not arrived';
-    else if (m && m.completion <= curTime) state = 'done';
-    else if (p.pid === runningPid) state = 'running';
-    else state = 'ready';
-    const colors = { 'running': 'running', 'ready': 'ready', 'done': 'done', 'not arrived': 'done' };
-    const labels = { 'running': '▶ Running', 'ready': '⏳ Ready', 'done': '✓ Done', 'not arrived': '○ Waiting' };
-    return `<div style="display:flex; align-items:center; justify-content:space-between; font-size:0.82rem; padding:5px 8px; border-radius:6px; background:var(--blue-1); border:1px solid var(--line)">
-      <span style="display:flex; align-items:center; gap:6px"><span class="state-dot ${colors[state]}"></span><strong>P${p.pid}</strong></span>
-      <span style="color:var(--muted)">${labels[state]}</span>
+function updateProcessStates(tick) {
+  const list=document.getElementById('procStatesList');
+  if(!tick){ list.innerHTML='<div class="text-muted text-sm">Run simulation.</div>'; return; }
+  document.getElementById('curTimeDisp').textContent=tick.t;
+  list.innerHTML = processes.map(p=>{
+    const st=tick.processStates[p.pid]||'not_arrived';
+    const stLabel={'not_arrived':'Not Arrived','ready':'Ready','running':'Running','completed':'Completed'};
+    const sbClass={'not_arrived':'sb-not-arrived','ready':'sb-ready','running':'sb-running','completed':'sb-done'};
+    const starvWarn = tick.starvWarnings?.includes(p.pid);
+    const rem = tick.remaining?.[p.pid]??p.burst;
+    const effPri = tick.effectivePriority?.[p.pid];
+    const priStr = (currentAlgo.startsWith('priority') && effPri!=null) ?
+      ` pri:${effPri}${effPri!==p.priority?'↑':''}` : '';
+    return `<div class="process-state-card state-${st}">
+      <span class="state-chip" style="background:${p.color};width:24px;height:24px;font-size:.62rem">P${p.pid}</span>
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:.82rem">P${p.pid}${priStr}</div>
+        <div style="font-size:.7rem;color:var(--muted)">rem:${rem}</div>
+      </div>
+      <span class="state-badge ${sbClass[st]}">${stLabel[st]}</span>
+      ${starvWarn?'<span class="starv-badge">⚠ starv</span>':''}
     </div>`;
   }).join('');
 }
 
-document.getElementById('stepBackBtn').addEventListener('click', () => {
-  stopPlay(); if (currentStep > 0) { currentStep--; updatePlayback(); }
-});
-document.getElementById('stepFwdBtn').addEventListener('click', () => {
-  stopPlay(); if (currentStep < steps.length) { currentStep++; updatePlayback(); }
-});
-
-let playing = false;
-function stopPlay() {
-  clearInterval(playInterval); playing = false;
-  document.getElementById('playBtn').textContent = '▶ Play';
+function updateDecisionBox(tick) {
+  const box=document.getElementById('decisionBox');
+  if(!tick){ box.textContent='No simulation running.'; return; }
+  const typeColors={select:'var(--accent)',preempt:'var(--disk-color)',idle:'var(--muted)',continue:'var(--muted)','rr-requeue':'var(--process-color)','arrive':'var(--accent-3)',complete:'var(--mem-color)'};
+  const color=typeColors[tick.reasonType]||'var(--muted)';
+  let html=`<div style="color:${color};font-weight:700;font-size:.72rem;text-transform:uppercase;margin-bottom:4px">${tick.reasonType.replace('-',' ')}</div>`;
+  html+=`<div>${tick.reason||'(No change)'}</div>`;
+  if(tick.arriving.length) html+=`<div style="color:var(--accent-3);font-size:.75rem;margin-top:4px">⤵ Arriving: ${tick.arriving.map(id=>`P${id}`).join(', ')}</div>`;
+  if(tick.completing.length) html+=`<div style="color:var(--mem-color);font-size:.75rem;margin-top:2px">✓ Completed: ${tick.completing.map(id=>`P${id}`).join(', ')}</div>`;
+  if(tick.starvWarnings?.length) html+=`<div style="color:#d59a26;font-size:.75rem;margin-top:4px">⚠ Starvation risk: ${tick.starvWarnings.map(id=>`P${id}`).join(', ')}</div>`;
+  box.innerHTML=html;
 }
-document.getElementById('playBtn').addEventListener('click', () => {
-  if (playing) { stopPlay(); return; }
-  if (currentStep >= steps.length) currentStep = 0;
-  playing = true;
-  document.getElementById('playBtn').textContent = '⏸ Pause';
-  playInterval = setInterval(() => {
-    if (currentStep >= steps.length) { stopPlay(); return; }
-    currentStep++; updatePlayback();
-  }, 600 * speedFactor);
-});
 
-document.querySelectorAll('.speed-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.speed-btn').forEach(x => x.classList.remove('active'));
-    btn.classList.add('active');
-    speedFactor = parseFloat(btn.dataset.spd);
-    if (playing) { stopPlay(); document.getElementById('playBtn').click(); }
+function buildDecisionLog(tl) {
+  const log=document.getElementById('decisionLog');
+  const entries=tl.filter(t=>t.reasonType!=='continue'||t.arriving.length||t.completing.length);
+  log.innerHTML=entries.map((tick,i)=>{
+    return `<div class="dec-entry type-${tick.reasonType}" id="de-${tick.t}">
+      <span class="dec-time">t=${tick.t}</span>${tick.reason||'continuing'}
+      ${tick.arriving.length?`<div class="dec-reason">⤵ +${tick.arriving.map(id=>`P${id}`).join(',')}</div>`:''}
+      ${tick.completing.length?`<div class="dec-reason">✓ done: ${tick.completing.map(id=>`P${id}`).join(',')}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function scrollLogToTick(t) {
+  const el=document.getElementById(`de-${t}`);
+  if(el){ document.querySelectorAll('.dec-entry').forEach(x=>x.classList.remove('current')); el.classList.add('current'); el.scrollIntoView({block:'nearest'}); }
+}
+
+function updateLiveStats(tl, upTo) {
+  const active = tl.slice(0,upTo);
+  const totalTicks=upTo;
+  const busyTicks=active.filter(t=>t.running!==null).length;
+  const idleTicks=totalTicks-busyTicks;
+  const done=active[upTo-1]?.completionTimes?active[upTo-1].completionTimes:{};
+  const completedCount=active[upTo-1]?Object.values(active[upTo-1].processStates).filter(s=>s==='completed').length:0;
+  const ctxSw=active[upTo-1]?.contextSwitches??0;
+  const util=totalTicks>0?((busyTicks/totalTicks)*100).toFixed(1):'—';
+  document.getElementById('statCtx').textContent=ctxSw;
+  document.getElementById('statUtil').textContent=util+'%';
+  document.getElementById('statThru').textContent=completedCount+` proc/${totalTicks} ticks`;
+  document.getElementById('statIdle').textContent=idleTicks+` ticks`;
+  if(ctxSw>0) document.getElementById('ctxLegend').style.display='';
+}
+
+function renderMetrics(procs, tl) {
+  const metrics=computeMetrics(procs,tl);
+  const grid=document.getElementById('metricsGrid');
+  const avgWT=(metrics.reduce((s,m)=>s+(m.wt>=0?m.wt:0),0)/metrics.length).toFixed(2);
+  const avgTAT=(metrics.reduce((s,m)=>s+(m.tat>=0?m.tat:0),0)/metrics.length).toFixed(2);
+  const avgRT=(metrics.reduce((s,m)=>s+(m.rt>=0?m.rt:0),0)/metrics.length).toFixed(2);
+  const busyTicks=tl.filter(t=>t.running!==null).length;
+  const util=((busyTicks/tl.length)*100).toFixed(1);
+
+  grid.innerHTML=`
+    <div class="metric-card"><div class="metric-value" style="color:var(--cpu-color)">${avgWT}</div><div class="metric-label">Avg WT</div></div>
+    <div class="metric-card"><div class="metric-value" style="color:var(--mem-color)">${avgTAT}</div><div class="metric-label">Avg TAT</div></div>
+    <div class="metric-card"><div class="metric-value" style="color:var(--disk-color)">${avgRT}</div><div class="metric-label">Avg RT</div></div>
+    <div class="metric-card"><div class="metric-value" style="color:var(--deadlock-color)">${util}%</div><div class="metric-label">CPU Util</div></div>
+  `;
+
+  const body=document.getElementById('metricsBody');
+  body.innerHTML=metrics.map(m=>`<tr>
+    <td><span class="state-chip" style="background:${m.color};width:24px;height:24px;font-size:.62rem">P${m.pid}</span></td>
+    <td>${m.arrival}</td><td>${m.burst}</td>
+    <td><strong>${m.ct>=0?m.ct:'—'}</strong></td>
+    <td title="TAT = CT(${m.ct}) − Arrival(${m.arrival})">${m.tat>=0?`<strong>${m.tat}</strong>`:'-'}</td>
+    <td title="WT = TAT(${m.tat}) − Burst(${m.burst})" style="color:var(--cpu-color)">${m.wt>=0?`<strong>${m.wt}</strong>`:'-'}</td>
+    <td>${m.rt>=0?m.rt:'—'}</td>
+  </tr>`).join('');
+
+  const foot=document.getElementById('metricsFoot');
+  foot.innerHTML=`<tr style="background:var(--blue-1)"><td colspan="4" style="color:var(--muted);font-size:.75rem">Average</td><td>${avgTAT}</td><td>${avgWT}</td><td>${avgRT}</td></tr>`;
+}
+
+// ══════════════════════════════════════════════════════════
+// MAIN RUN
+// ══════════════════════════════════════════════════════════
+document.getElementById('runBtn').onclick = run;
+
+function run() {
+  stopPlay();
+  if(!validateInput()) return;
+  const opts = {
+    quantum: parseInt(document.getElementById('quantumInput').value)||2,
+    aging: document.getElementById('agingCheck').checked,
+    agingInterval: parseInt(document.getElementById('agingInterval').value)||5,
+  };
+  timeline = simulate(processes, currentAlgo, opts);
+  if(!timeline.length) return;
+
+  currentTick = timeline.length;
+
+  // Build UI
+  document.getElementById('playbackBar').style.display='flex';
+  document.getElementById('scrubberWrap').style.display='';
+  document.getElementById('decLogArea').style.display='';
+  document.getElementById('metricsArea').style.display='';
+
+  const scrubber=document.getElementById('scrubber');
+  scrubber.max = timeline.length;
+  scrubber.value = timeline.length;
+
+  buildDecisionLog(timeline);
+  buildGanttCells(timeline, currentTick);
+  updateAtTick(currentTick);
+  renderMetrics(processes, timeline);
+  showTeachMode();
+
+  // Aging info
+  if(timeline._agingEvents?.length){
+    document.getElementById('agingInfoBox').style.display='';
+    document.getElementById('agingLog').innerHTML = timeline._agingEvents.map(e=>
+      `t=${e.t}: P${e.pid} pri ${e.oldPri}→${e.newPri} (aged)`
+    ).join('<br>');
+  }
+
+  // Comparison
+  if(compareMode) runComparison();
+}
+
+function updateAtTick(t) {
+  const tick = timeline[Math.max(0,Math.min(t-1,timeline.length-1))];
+  buildGanttCells(timeline, t);
+  updateReadyQueue(tick);
+  updateProcessStates(tick);
+  updateDecisionBox(tick);
+  scrollLogToTick(tick?.t);
+  updateLiveStats(timeline, t);
+  renderTable(tick?.processStates);
+  document.getElementById('tickLabel').textContent = `t = ${t}`;
+  document.getElementById('stepCounter').textContent = `t=${t}`;
+  document.getElementById('scrubber').value = t;
+
+  // Quiz check
+  if(quizMode && tick && tick.isNewDecision && t!==pendingQuizTick){
+    pendingQuizTick = t;
+    showQuiz(tick, t);
+  }
+}
+
+function validateInput() {
+  let ok=true, msg='';
+  processes.forEach(p=>{
+    if(p.burst<1){ ok=false; msg+=`P${p.pid}: burst must be ≥1. `; }
+    if(p.arrival<0){ ok=false; msg+=`P${p.pid}: arrival must be ≥0. `; }
   });
+  if(!processes.length){ ok=false; msg='Add at least one process.'; }
+  const errDiv=document.getElementById('tableErrors');
+  errDiv.textContent=msg; errDiv.style.display=ok?'none':'block';
+  return ok;
+}
+
+function resetViz() {
+  stopPlay(); timeline=[]; currentTick=0;
+  document.getElementById('ganttInner').innerHTML='<div style="color:var(--muted);font-size:.85rem;padding:20px 0;text-align:center">Configure processes and click <strong>Simulate</strong></div>';
+  document.getElementById('playbackBar').style.display='none';
+  document.getElementById('scrubberWrap').style.display='none';
+  document.getElementById('decLogArea').style.display='none';
+  document.getElementById('metricsArea').style.display='none';
+  document.getElementById('comparisonSection').style.display='none';
+  document.getElementById('readyQueueSlots').innerHTML='<span class="rq-empty">Run simulation to see the ready queue</span>';
+  document.getElementById('procStatesList').innerHTML='<div class="text-muted text-sm">Run the simulation to see process states.</div>';
+  document.getElementById('decisionBox').textContent='No simulation running.';
+  document.getElementById('curTimeDisp').textContent='—';
+  document.getElementById('legendRow').innerHTML='';
+  document.getElementById('agingInfoBox').style.display='none';
+  document.getElementById('starvInfoBox').style.display='none';
+  ['statCtx','statUtil','statThru','statIdle'].forEach(id=>document.getElementById(id).textContent='—');
+}
+
+document.getElementById('resetBtn').onclick = () => { resetViz(); renderTable(); };
+
+// ══════════════════════════════════════════════════════════
+// PLAYBACK
+// ══════════════════════════════════════════════════════════
+document.getElementById('stepBackBtn').onclick = () => { stopPlay(); if(currentTick>1){currentTick--;updateAtTick(currentTick);} };
+document.getElementById('stepFwdBtn').onclick = () => { stopPlay(); if(currentTick<timeline.length){currentTick++;updateAtTick(currentTick);} };
+document.getElementById('stepStartBtn').onclick = () => { stopPlay(); currentTick=1; updateAtTick(1); };
+document.getElementById('stepEndBtn').onclick = () => { stopPlay(); currentTick=timeline.length; updateAtTick(timeline.length); };
+
+function stopPlay(){ clearInterval(playInterval); playing=false; document.getElementById('playBtn').textContent='▶ Play'; }
+document.getElementById('playBtn').onclick = () => {
+  if(playing){ stopPlay(); return; }
+  if(currentTick>=timeline.length) currentTick=0;
+  playing=true; document.getElementById('playBtn').textContent='⏸ Pause';
+  playInterval=setInterval(()=>{
+    if(currentTick>=timeline.length){ stopPlay(); return; }
+    currentTick++; updateAtTick(currentTick);
+  }, 500*speedFactor);
+};
+
+document.querySelectorAll('.speed-btn').forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll('.speed-btn').forEach(x=>x.classList.remove('active'));
+    btn.classList.add('active'); speedFactor=parseFloat(btn.dataset.spd);
+    if(playing){ stopPlay(); document.getElementById('playBtn').click(); }
+  };
 });
 
-document.getElementById('resetBtn').addEventListener('click', () => {
-  stopPlay(); currentStep = 0; ganttData = []; steps = [];
-  document.getElementById('ganttWrap').innerHTML = '<div style="color:var(--muted);font-size:0.85rem;text-align:center;padding:24px 0">Configure processes and click <strong>Compute</strong> to visualize</div>';
-  document.getElementById('playbackBar').style.display = 'none';
-  document.getElementById('metricsArea').style.display = 'none';
-  document.getElementById('timeBar').style.display = 'none';
-  document.getElementById('ganttLegend').innerHTML = '';
-  document.getElementById('statesPanel').innerHTML = '<div class="text-muted text-sm">Run the simulation to see process states.</div>';
-  document.getElementById('stepLog').innerHTML = '<div class="step-entry">Ready for simulation.</div>';
+document.getElementById('scrubber').oninput=function(){
+  stopPlay(); currentTick=parseInt(this.value); updateAtTick(currentTick);
+};
+
+// ══════════════════════════════════════════════════════════
+// MODES
+// ══════════════════════════════════════════════════════════
+document.getElementById('teachBtn').onclick=function(){
+  teachMode=!teachMode; this.classList.toggle('active',teachMode);
+  showTeachMode();
+};
+function showTeachMode(){
+  const wrapper=document.getElementById('teachRevealWrapper');
+  const revealBtn=document.getElementById('teachRevealBtn');
+  if(teachMode && timeline.length){
+    wrapper.classList.add('teach-blur');
+    revealBtn.style.display='block';
+  } else {
+    wrapper.classList.remove('teach-blur');
+    revealBtn.style.display='none';
+  }
+}
+document.getElementById('revealResultsBtn').onclick=()=>{
+  document.getElementById('teachRevealWrapper').classList.remove('teach-blur');
+  document.getElementById('teachRevealBtn').style.display='none';
+};
+
+document.getElementById('quizBtn').onclick=function(){
+  quizMode=!quizMode; this.classList.toggle('active',quizMode);
+  quizCorrect=0; quizTotal=0; pendingQuizTick=-1;
+  document.getElementById('quizScore').textContent=quizMode?`Score: ${quizCorrect}/${quizTotal}`:'Quiz mode is off.';
+};
+
+document.getElementById('compareBtn').onclick=function(){
+  compareMode=!compareMode; this.classList.toggle('active',compareMode);
+  if(compareMode && timeline.length) runComparison();
+  else document.getElementById('comparisonSection').style.display='none';
+};
+
+// ══════════════════════════════════════════════════════════
+// QUIZ
+// ══════════════════════════════════════════════════════════
+function showQuiz(tick, tickNum) {
+  if(!quizMode) return;
+  stopPlay();
+  const overlay=document.getElementById('quizOverlay');
+  overlay.classList.remove('hidden');
+
+  const rqPids = tick.readyQueue.map(r=>r.pid);
+  const options = [...rqPids];
+  if(tick.running!==null && !options.includes(tick.running)) options.unshift(tick.running);
+  if(!options.length) return; // nothing to quiz
+
+  const correct = tick.running; // what actually runs
+
+  document.getElementById('quizQ').innerHTML = `<div style="font-size:.8rem;color:var(--muted);margin-bottom:4px">At t=${tick.t-1}→${tick.t}:</div>Which process should run next?`;
+
+  const optsHtml = [...new Set([...options, null])].map(pid=>{
+    const p=pid?processes.find(x=>x.pid===pid):null;
+    const label=pid?`<span class="state-chip" style="background:${p?.color||'#888'};width:20px;height:20px;font-size:.6rem">P${pid}</span> P${pid}`: '💤 CPU Idle';
+    return `<div class="quiz-opt" data-pid="${pid}" onclick="selectQuizOpt(this, ${pid}, ${correct})">
+      ${label}
+      ${pid?`<span style="font-size:.7rem;color:rgba(255,255,255,.7)"></span>`:''}
+    </div>`;
+  }).join('');
+  document.getElementById('quizOpts').innerHTML=optsHtml;
+  document.getElementById('quizResultBox').classList.add('hidden');
+  document.getElementById('quizContinueBtn').classList.add('hidden');
+  document.getElementById('quizSubmitBtn').classList.remove('hidden');
+  document.getElementById('quizSkipBtn').classList.remove('hidden');
+  pendingQuizAnswer=null;
+  quizTotal++;
+  updateQuizScore();
+}
+
+function selectQuizOpt(el, pid, correct){
+  document.querySelectorAll('.quiz-opt').forEach(x=>x.classList.remove('selected'));
+  el.classList.add('selected');
+  pendingQuizAnswer=pid;
+  document.getElementById('quizSubmitBtn').classList.remove('hidden');
+}
+
+document.getElementById('quizSubmitBtn').onclick=()=>{
+  if(pendingQuizAnswer===undefined||pendingQuizAnswer===null) return;
+  const tick=timeline[currentTick-1];
+  const correct=tick?.running;
+  const isCorrect=pendingQuizAnswer===correct;
+  if(isCorrect) quizCorrect++;
+
+  const resultBox=document.getElementById('quizResultBox');
+  resultBox.className='quiz-result '+(isCorrect?'correct':'wrong');
+  resultBox.innerHTML=isCorrect?
+    `✓ Correct! ${tick.reason}`:
+    `✗ Wrong. The answer is P${correct}. ${tick.reason}`;
+  resultBox.classList.remove('hidden');
+
+  document.querySelectorAll('.quiz-opt').forEach(el=>{
+    const p=parseInt(el.dataset.pid)||null;
+    el.classList.add(p===correct?'correct':'wrong');
+  });
+
+  document.getElementById('quizSubmitBtn').classList.add('hidden');
+  document.getElementById('quizContinueBtn').classList.remove('hidden');
+  updateQuizScore();
+};
+
+document.getElementById('quizContinueBtn').onclick=()=>{
+  document.getElementById('quizOverlay').classList.add('hidden');
+  if(playing||currentTick<timeline.length){ document.getElementById('playBtn').click(); }
+};
+
+document.getElementById('quizSkipBtn').onclick=()=>{
+  document.getElementById('quizOverlay').classList.add('hidden');
+};
+
+function updateQuizScore(){
+  const scoreEl=document.getElementById('quizScore');
+  scoreEl.textContent=`Score: ${quizCorrect}/${quizTotal}`;
+  const boxEl=document.getElementById('quizScoreBox');
+  boxEl.textContent=`Score: ${quizCorrect}/${quizTotal}`;
+}
+
+// ══════════════════════════════════════════════════════════
+// COMPARISON
+// ══════════════════════════════════════════════════════════
+function runComparison() {
+  const opts={quantum:parseInt(document.getElementById('quantumInput').value)||2};
+  const configs=[
+    {id:'fcfs',label:'FCFS'},
+    {id:'sjf',label:'SJF (NP)'},
+    {id:'srtf',label:'SRTF'},
+    {id:'rr',label:`RR (q=${opts.quantum})`},
+    {id:'priority_np',label:'Priority NP'},
+    {id:'priority_p',label:'Priority P'},
+  ];
+  const results=configs.map(c=>{
+    const tl=simulate(processes,c.id,opts);
+    const metrics=computeMetrics(processes,tl);
+    const avgWT=metrics.reduce((s,m)=>s+(m.wt>=0?m.wt:0),0)/metrics.length;
+    const avgTAT=metrics.reduce((s,m)=>s+(m.tat>=0?m.tat:0),0)/metrics.length;
+    const avgRT=metrics.reduce((s,m)=>s+(m.rt>=0?m.rt:0),0)/metrics.length;
+    const busyTicks=tl.filter(t=>t.running!==null).length;
+    const util=tl.length?((busyTicks/tl.length)*100):0;
+    const ctx=tl[tl.length-1]?.contextSwitches||0;
+    return {...c,avgWT,avgTAT,avgRT,util,ctx};
+  });
+
+  const maxWT=Math.max(...results.map(r=>r.avgWT));
+  const minWT=Math.min(...results.map(r=>r.avgWT));
+
+  const body=document.getElementById('compTableBody');
+  body.innerHTML=results.map(r=>{
+    const isBestWT=r.avgWT===minWT;
+    const isWorstWT=r.avgWT===maxWT;
+    const pct=maxWT>0?(r.avgWT/maxWT*100):0;
+    return `<tr style="${r.id===currentAlgo?'background:var(--blue-2)':''}">
+      <td><strong>${r.label}</strong>${r.id===currentAlgo?'<span class="badge badge-blue" style="margin-left:4px">current</span>':''}</td>
+      <td class="${isBestWT?'comp-best':isWorstWT?'comp-worst':''}">${r.avgWT.toFixed(2)}</td>
+      <td>${r.avgTAT.toFixed(2)}</td>
+      <td>${r.avgRT.toFixed(2)}</td>
+      <td>${r.util.toFixed(1)}%</td>
+      <td>${r.ctx}</td>
+      <td class="comp-bar-cell"><div class="comp-bar"><div class="comp-fill" style="width:${pct}%;background:${isBestWT?'var(--mem-color)':isWorstWT?'var(--disk-color)':'var(--accent)'}"></div></div></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('comparisonSection').style.display='';
+}
+
+// ══════════════════════════════════════════════════════════
+// PRESETS
+// ══════════════════════════════════════════════════════════
+const PRESETS = {
+  simple: [
+    {pid:1,arrival:0,burst:5,priority:3},{pid:2,arrival:1,burst:3,priority:1},
+    {pid:3,arrival:2,burst:8,priority:4},{pid:4,arrival:3,burst:2,priority:2},
+  ],
+  idle: [
+    {pid:1,arrival:0,burst:2,priority:2},{pid:2,arrival:5,burst:4,priority:1},
+    {pid:3,arrival:12,burst:3,priority:3},
+  ],
+  tie: [
+    {pid:1,arrival:0,burst:4,priority:2},{pid:2,arrival:0,burst:4,priority:2},
+    {pid:3,arrival:0,burst:4,priority:2},{pid:4,arrival:2,burst:2,priority:1},
+  ],
+  starve: [
+    {pid:1,arrival:0,burst:10,priority:3},{pid:2,arrival:1,burst:3,priority:1},
+    {pid:3,arrival:1,burst:2,priority:1},{pid:4,arrival:2,burst:2,priority:1},
+    {pid:5,arrival:0,burst:8,priority:5},
+  ],
+  beladys: [
+    {pid:1,arrival:0,burst:5,priority:1},{pid:2,arrival:0,burst:3,priority:2},
+    {pid:3,arrival:1,burst:9,priority:3},{pid:4,arrival:3,burst:2,priority:1},
+    {pid:5,arrival:4,burst:4,priority:2},
+  ],
+};
+
+document.querySelectorAll('[data-preset]').forEach(btn=>{
+  btn.onclick=()=>{
+    const pset=PRESETS[btn.dataset.preset];
+    if(!pset) return;
+    resetViz();
+    processes=pset.map((p,i)=>({...p,color:COLORS[i%8]}));
+    pidCounter=processes.length+1;
+    renderTable();
+  };
 });
 
+// ══════════════════════════════════════════════════════════
+// RANDOM GENERATION
+// ══════════════════════════════════════════════════════════
+document.getElementById('randomBtn').onclick=()=>{
+  const n=parseInt(document.getElementById('randCount').value)||4;
+  const minB=parseInt(document.getElementById('randMin').value)||1;
+  const maxB=parseInt(document.getElementById('randMax').value)||8;
+  processes=[]; pidCounter=1;
+  for(let i=0;i<Math.min(n,8);i++){
+    processes.push({
+      pid:pidCounter++,
+      arrival:Math.floor(Math.random()*8),
+      burst:minB+Math.floor(Math.random()*(maxB-minB+1)),
+      priority:1+Math.floor(Math.random()*5),
+      color:COLORS[i%8]
+    });
+  }
+  resetViz(); renderTable();
+};
+
+// ══════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════
 init();
 </script>
 </body>

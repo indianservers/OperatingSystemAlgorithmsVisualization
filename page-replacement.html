@@ -1,98 +1,184 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="light">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Page Replacement — OS Algorithms</title>
-  <link rel="stylesheet" href="css/style.css">
-  <style>
-    .frame-grid { display: flex; gap: 12px; flex-wrap: wrap; }
-    .frame-col { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-    .frame-head {
-      font-size: 0.7rem; font-weight: 700; color: var(--muted);
-      text-transform: uppercase; letter-spacing: 0.06em;
-    }
-    .frame-cell {
-      width: 58px; height: 52px;
-      border-radius: var(--radius-md);
-      border: 2px solid var(--line);
-      background: var(--blue-1);
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      font-size: 1rem; font-weight: 800;
-      color: var(--ink);
-      transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
-      position: relative;
-    }
-    .frame-cell.empty { color: var(--muted); font-size: 0.7rem; font-weight: 500; font-style: italic; }
-    .frame-cell.hit {
-      background: linear-gradient(135deg, #d4f0e3, #b4e6cc);
-      border-color: #22a06b;
-      color: #135b49;
-      box-shadow: 0 0 0 3px rgba(34,160,107,0.2);
-      transform: scale(1.05);
-    }
-    .frame-cell.fault {
-      background: linear-gradient(135deg, #fde8df, #fbbfa3);
-      border-color: #ef6c3e;
-      color: #8b2500;
-      box-shadow: 0 0 0 3px rgba(239,108,62,0.2);
-    }
-    .frame-cell.evict {
-      background: linear-gradient(135deg, #fef3c7, #fde68a);
-      border-color: #d59a26;
-      color: #5a3800;
-    }
-    .frame-cell .use-badge {
-      position: absolute; top: 3px; right: 5px;
-      font-size: 0.6rem; font-weight: 700;
-      color: var(--accent-3);
-    }
-    .frame-cell .freq-badge {
-      position: absolute; bottom: 3px; right: 5px;
-      font-size: 0.6rem; font-weight: 600;
-      color: var(--muted);
-    }
-    .ref-string-display {
-      display: flex; gap: 6px; flex-wrap: wrap;
-      padding: 12px 16px;
-      background: var(--blue-1);
-      border: 1px solid var(--line);
-      border-radius: var(--radius-lg);
-    }
-    .ref-token {
-      width: 38px; height: 38px;
-      border-radius: var(--radius-sm);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 0.9rem; font-weight: 700;
-      background: var(--panel);
-      border: 1px solid var(--line);
-      color: var(--ink);
-      transition: all 0.25s;
-      flex-shrink: 0;
-      cursor: default;
-    }
-    .ref-token.done-hit { background: #d4f0e3; border-color: #22a06b; color: #135b49; }
-    .ref-token.done-fault { background: #fde8df; border-color: #ef6c3e; color: #8b2500; }
-    .ref-token.current {
-      background: var(--accent);
-      color: #fff; border-color: var(--blue-5);
-      transform: scale(1.18);
-      box-shadow: 0 4px 12px rgba(22,115,199,0.35);
-    }
-    .step-table th, .step-table td { padding: 6px 10px; font-size: 0.78rem; }
-    .step-table .hit-row td { background: #f4fdf8 !important; }
-    .step-table .fault-row td { background: #fff7f5 !important; }
-    [data-theme="dark"] .step-table .hit-row td { background: #0f2a1e !important; }
-    [data-theme="dark"] .step-table .fault-row td { background: #2a0e00 !important; }
-    .fault-indicator {
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 22px; height: 22px; border-radius: 50%;
-      font-size: 0.7rem; font-weight: 800;
-    }
-    .fault-indicator.hit { background: var(--mem-light); color: var(--mem-color); }
-    .fault-indicator.fault { background: var(--disk-light); color: var(--disk-color); }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Page Replacement — OS Algorithms</title>
+<link rel="stylesheet" href="css/style.css">
+<style>
+/* ─── Layout ──────────────────────────────────────── */
+.pr-layout {
+  display: grid;
+  grid-template-columns: 290px minmax(0,1fr) 270px;
+  min-height: calc(100vh - 108px);
+}
+.toolbar {
+  background: linear-gradient(180deg,#f8fbff,#eef6ff);
+  border-bottom: 1px solid var(--line);
+  padding: 8px 20px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+[data-theme=dark] .toolbar { background: linear-gradient(180deg,#172434,#0f1c2e); }
+.mode-toggle {
+  padding: 5px 12px; border-radius: 20px; font-size: .75rem; font-weight: 700;
+  border: 1px solid var(--line); cursor: pointer; background: var(--panel); color: var(--muted); transition: all .15s;
+}
+.mode-toggle.active { background: var(--mem-color); color: #fff; border-color: #156040; }
+.toolbar-sep { width:1px; height:24px; background:var(--line); margin:0 4px; }
+.algo-tab {
+  padding: 6px 11px; border-radius: var(--radius-sm);
+  font-size: .78rem; font-weight: 600;
+  border: 1px solid var(--line); cursor: pointer;
+  background: var(--blue-1); color: var(--muted); transition: all .15s;
+}
+.algo-tab.active { background: var(--mem-color); color: #fff; border-color: #156040; }
+.algo-tab:hover { background: var(--mem-light); color: #135b49; }
+
+/* ─── Reference String ────────────────────────────── */
+.ref-string-display {
+  display: flex; gap: 5px; flex-wrap: wrap;
+  padding: 12px 14px;
+  background: var(--blue-1); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); min-height: 60px;
+}
+.ref-token {
+  width: 36px; height: 36px; border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  font-size: .88rem; font-weight: 800;
+  background: var(--panel); border: 1px solid var(--line);
+  color: var(--ink); transition: all .25s; flex-shrink: 0;
+  cursor: pointer; user-select: none;
+}
+.ref-token.hit { background: var(--mem-light); border-color: var(--mem-color); color: #135b49; }
+.ref-token.fault { background: var(--disk-light); border-color: var(--disk-color); color: #8b2500; }
+.ref-token.current {
+  background: var(--accent); color: #fff; border-color: var(--blue-5);
+  transform: scale(1.2); box-shadow: 0 4px 14px rgba(22,115,199,.4);
+  z-index: 2;
+}
+
+/* ─── Frame visualization ─────────────────────────── */
+.frame-column {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.frame-header {
+  font-size: .68rem; font-weight: 800; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .06em;
+}
+.frame-cell {
+  width: 64px; height: 56px;
+  border-radius: var(--radius-md); border: 2px solid var(--line);
+  background: var(--blue-1);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-size: .95rem; font-weight: 800; color: var(--ink);
+  position: relative; transition: all .35s cubic-bezier(.34,1.56,.64,1);
+  cursor: default;
+}
+.frame-cell.empty { color: var(--muted); font-size: .7rem; font-weight: 400; font-style: italic; }
+.frame-cell.hit {
+  background: linear-gradient(135deg,#d4f0e3,#b4e6cc);
+  border-color: var(--mem-color); color: #135b49;
+  box-shadow: 0 0 0 3px rgba(34,160,107,.2);
+  animation: bounce-in .4s ease;
+}
+.frame-cell.fault {
+  background: linear-gradient(135deg,#fde8df,#fbbfa3);
+  border-color: var(--disk-color); color: #8b2500;
+  box-shadow: 0 0 0 3px rgba(239,108,62,.2);
+  animation: shake .4s ease;
+}
+.frame-cell.evict {
+  background: linear-gradient(135deg,#fef3c7,#fde68a);
+  border-color: #d59a26; color: #5a3800;
+}
+.fc-meta {
+  position: absolute; font-size: .58rem; font-weight: 700;
+  line-height: 1; padding: 1px 3px; border-radius: 3px;
+}
+.fc-top { top: 4px; right: 4px; }
+.fc-bot { bottom: 4px; right: 4px; color: var(--muted); }
+.fc-ptr { top: 4px; left: 4px; color: var(--accent); }
+@keyframes bounce-in { 0%{transform:scale(.8);opacity:.5} 60%{transform:scale(1.08)} 100%{transform:scale(1);opacity:1} }
+@keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-4px)} 60%{transform:translateX(4px)} 80%{transform:translateX(-2px)} }
+
+/* ─── FIFO queue ──────────────────────────────────── */
+.fifo-queue {
+  display: flex; gap: 4px; align-items: center; flex-wrap: wrap;
+  padding: 8px 12px; background: var(--blue-1); border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.fq-item {
+  padding: 3px 10px; border-radius: 20px; background: var(--panel);
+  border: 1px solid var(--line); font-size: .78rem; font-weight: 700;
+  transition: all .25s;
+}
+.fq-item.oldest { background: var(--disk-light); border-color: var(--disk-color); color: #8b2500; }
+
+/* ─── Lookahead strip (Optimal) ───────────────────── */
+.lookahead-strip {
+  display: flex; gap: 3px; flex-wrap: wrap;
+  padding: 6px 10px; background: var(--process-light);
+  border: 1px solid var(--deadlock-light); border-radius: var(--radius-sm);
+}
+.la-token {
+  font-size: .72rem; font-weight: 700; padding: 2px 7px;
+  border-radius: 10px; background: var(--panel); border: 1px solid var(--line);
+}
+.la-token.target { background: var(--deadlock-light); border-color: var(--deadlock-color); color: #2d3191; }
+.la-token.not-found { background: var(--disk-light); border-color: var(--disk-color); color: #8b2500; }
+
+/* ─── History table ───────────────────────────────── */
+.hist-table th { font-size:.68rem; padding:6px 8px; }
+.hist-table td { padding:5px 8px; font-size:.78rem; }
+.hist-row.hit td { background:#f4fdf8 !important; }
+.hist-row.fault td { background:#fff7f5 !important; }
+[data-theme=dark] .hist-row.hit td { background:#0f2a1e !important; }
+[data-theme=dark] .hist-row.fault td { background:#2a0e00 !important; }
+.hist-row.current-row td { outline: 2px solid var(--accent); outline-offset:-1px; }
+.hit-badge { background:var(--mem-light); color:#135b49; padding:2px 8px; border-radius:10px; font-size:.7rem; font-weight:800; }
+.fault-badge { background:var(--disk-light); color:#8b2500; padding:2px 8px; border-radius:10px; font-size:.7rem; font-weight:800; }
+
+/* ─── Belady demo ─────────────────────────────────── */
+.belady-demo {
+  background: linear-gradient(135deg, #e0e2fd, #b5b9fb);
+  border: 1px solid #5865f2; border-radius: var(--radius-lg);
+  padding: 14px 16px;
+}
+.belady-row { display:flex; gap:8px; align-items:center; margin-bottom:8px; font-size:.82rem; }
+
+/* ─── Comparison chart ────────────────────────────── */
+.comp-bar-h {
+  height: 20px; border-radius: 4px;
+  background: var(--mem-color); transition: width .5s;
+  display: flex; align-items: center; padding-left: 6px;
+  font-size: .72rem; font-weight: 700; color: #fff;
+  min-width: 24px;
+}
+
+/* ─── Quiz overlay ────────────────────────────────── */
+.quiz-overlay {
+  position: fixed; inset: 0; background: rgba(10,20,40,.5);
+  backdrop-filter: blur(4px); z-index: 999;
+  display: flex; align-items: center; justify-content: center;
+}
+.quiz-card {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius-xl); padding: 24px; max-width: 420px; width: 90%;
+  box-shadow: 0 24px 64px rgba(0,0,30,.2);
+}
+.quiz-opt {
+  padding: 8px 14px; border-radius: var(--radius-md);
+  border: 2px solid var(--line); cursor: pointer;
+  font-size: .85rem; font-weight: 600; background: var(--blue-1);
+  transition: all .15s; margin-bottom: 6px;
+}
+.quiz-opt:hover { border-color: var(--mem-color); background: var(--mem-light); }
+.quiz-opt.correct { border-color: var(--mem-color); background: var(--mem-light); color: #135b49; }
+.quiz-opt.wrong { border-color: var(--disk-color); background: var(--disk-light); color: #8b2500; }
+
+@media(max-width:1200px){ .pr-layout{grid-template-columns:280px minmax(0,1fr);} .pr-layout .info-panel{display:none;} }
+@media(max-width:780px){ .pr-layout{grid-template-columns:1fr;} .control-panel{position:static;max-height:none;border-right:none;border-bottom:1px solid var(--line);} }
+</style>
 </head>
 <body>
 
@@ -109,467 +195,826 @@
     <a class="nav-link" href="deadlock.html"><span class="dot" style="background:#5865f2"></span>Deadlock</a>
     <a class="nav-link" href="memory-allocation.html"><span class="dot" style="background:#0f9f9a"></span>Memory Allocation</a>
   </div>
-  <div class="nav-actions">
-    <button class="theme-toggle" id="themeBtn">🌙</button>
-  </div>
+  <div class="nav-actions"><button class="theme-toggle" id="themeBtn">🌙</button></div>
 </nav>
 
-<div class="page-layout">
+<!-- Toolbar -->
+<div class="toolbar">
+  <div style="display:flex;gap:4px;flex-wrap:wrap">
+    <span class="text-xs text-muted font-bold">ALGO:</span>
+    <div class="algo-tab active" data-algo="fifo">FIFO</div>
+    <div class="algo-tab" data-algo="lru">LRU</div>
+    <div class="algo-tab" data-algo="lfu">LFU</div>
+    <div class="algo-tab" data-algo="optimal">Optimal</div>
+    <div class="algo-tab" data-algo="clock">Second Chance</div>
+  </div>
+  <div class="toolbar-sep"></div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap">
+    <span class="text-xs text-muted font-bold">PRESETS:</span>
+    <button class="btn btn-secondary btn-sm" data-preset="standard">Standard</button>
+    <button class="btn btn-secondary btn-sm" data-preset="belady">Bélady's Anomaly</button>
+    <button class="btn btn-secondary btn-sm" data-preset="locality">Locality</button>
+    <button class="btn btn-secondary btn-sm" data-preset="thrashing">Thrashing</button>
+  </div>
+  <div class="toolbar-sep"></div>
+  <button class="mode-toggle" id="quizBtn">❓ Quiz</button>
+  <button class="mode-toggle" id="compareBtn">⊕ Compare</button>
+  <button class="mode-toggle" id="beladyBtn">⚡ Bélady Demo</button>
+</div>
 
-  <!-- Control Panel -->
-  <aside class="control-panel">
-    <div>
-      <div class="card-header" style="margin-bottom:0">
-        <div class="card-icon" style="background:linear-gradient(135deg,#d4f0e3,#8fd6b2)">📄</div>
-        <div>
-          <div class="card-title">Page Replacement</div>
-          <div class="card-subtitle">Virtual Memory Visualization</div>
-        </div>
+<div class="pr-layout">
+
+<!-- ── Controls ────────────────────────────────────────── -->
+<aside class="control-panel" style="gap:14px">
+  <div>
+    <div class="card-header" style="margin-bottom:0">
+      <div class="card-icon" style="background:linear-gradient(135deg,#d4f0e3,#8fd6b2)">📄</div>
+      <div><div class="card-title">Page Replacement</div><div class="card-subtitle" id="algoSubtitle">First In First Out (FIFO)</div></div>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label class="form-label">Number of Frames</label>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input type="range" id="frameSlider" min="1" max="7" value="3" style="flex:1"
+        oninput="document.getElementById('frameVal').textContent=this.value;document.getElementById('frameInput').value=this.value">
+      <input type="number" id="frameInput" value="3" min="1" max="7" style="width:50px"
+        oninput="document.getElementById('frameSlider').value=this.value;document.getElementById('frameVal').textContent=this.value">
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:.75rem;margin-top:2px">
+      <span class="text-muted">1</span>
+      <strong style="color:var(--accent)" id="frameVal">3</strong>
+      <span class="text-muted">7</span>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label class="form-label">Reference String</label>
+    <input type="text" id="refInput" value="7 0 1 2 0 3 0 4 2 3 0 3 2" placeholder="e.g. 1 2 3 4 1 2 5">
+    <div class="form-hint">Space or comma separated. Pages 0–9 recommended.</div>
+    <div id="refErr" class="field-hint"></div>
+  </div>
+
+  <div class="btn-group">
+    <button class="btn btn-secondary btn-sm" id="randomRefBtn">⚡ Random</button>
+    <button class="btn btn-secondary btn-sm" id="localRefBtn">📍 Locality</button>
+  </div>
+
+  <!-- Frame comparison (3 vs 4) -->
+  <div style="background:var(--blue-1);border:1px solid var(--line);border-radius:var(--radius-md);padding:10px">
+    <div class="section-title" style="margin-bottom:6px">Frame Count Comparison</div>
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-secondary btn-sm" onclick="compareFrames(3,4)">3 vs 4 frames</button>
+      <button class="btn btn-secondary btn-sm" onclick="compareFrames(2,3)">2 vs 3 frames</button>
+    </div>
+    <div id="frameCompResult" style="margin-top:8px;font-size:.78rem"></div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="btn-group" style="flex-wrap:nowrap">
+    <button class="btn btn-primary w-full" id="runBtn">▶ Simulate</button>
+    <button class="btn btn-secondary" id="resetBtn">↺</button>
+  </div>
+</aside>
+
+<!-- ── Main ─────────────────────────────────────────────── -->
+<main class="viz-panel">
+
+  <!-- Reference String Timeline -->
+  <div class="card">
+    <div class="flex items-center justify-between" style="margin-bottom:10px">
+      <div><div class="panel-title" style="margin:0">Reference String</div><div class="text-muted text-sm">Click any reference to jump to that step</div></div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <div class="badge badge-green" id="hitBadge" style="display:none">✓ HIT</div>
+        <div class="badge badge-red" id="faultBadge" style="display:none">✗ FAULT</div>
       </div>
     </div>
+    <div class="ref-string-display" id="refDisplay">
+      <span class="text-muted text-sm">Configure and click Simulate</span>
+    </div>
+  </div>
 
-    <div>
-      <div class="section-title">Algorithm</div>
-      <div class="algo-grid">
-        <div class="algo-option selected" data-algo="fifo">FIFO</div>
-        <div class="algo-option" data-algo="lru">LRU</div>
-        <div class="algo-option" data-algo="lfu">LFU</div>
-        <div class="algo-option" data-algo="optimal">Optimal</div>
-        <div class="algo-option" data-algo="clock">Clock</div>
+  <!-- Frame State -->
+  <div class="card">
+    <div class="flex items-center justify-between" style="margin-bottom:12px">
+      <div>
+        <div class="panel-title" style="margin:0">Page Frames</div>
+        <div class="text-muted text-sm" id="frameLabel">State after each reference</div>
+      </div>
+      <div id="algoAuxLabel" style="display:none"></div>
+    </div>
+
+    <div id="framesDisplay" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start">
+      <div class="text-muted text-sm">Run simulation.</div>
+    </div>
+
+    <!-- FIFO Queue visualization -->
+    <div id="fifoQueueWrap" style="display:none;margin-top:12px">
+      <div class="section-title" style="margin-bottom:4px">FIFO Queue (front = next to evict)</div>
+      <div class="fifo-queue" id="fifoQueue"></div>
+    </div>
+
+    <!-- LRU recency visualization -->
+    <div id="lruOrderWrap" style="display:none;margin-top:12px">
+      <div class="section-title" style="margin-bottom:4px">LRU Order (left = least recently used)</div>
+      <div class="fifo-queue" id="lruOrder"></div>
+    </div>
+
+    <!-- LFU frequency visualization -->
+    <div id="lfuFreqWrap" style="display:none;margin-top:12px">
+      <div class="section-title" style="margin-bottom:4px">Page Frequencies</div>
+      <div id="lfuFreq" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    </div>
+
+    <!-- Optimal lookahead -->
+    <div id="optLookaheadWrap" style="display:none;margin-top:12px">
+      <div class="section-title" style="margin-bottom:4px">Future Use Lookahead</div>
+      <div class="lookahead-strip" id="lookahead"></div>
+    </div>
+
+    <!-- Clock hand -->
+    <div id="clockWrap" style="display:none;margin-top:12px">
+      <div class="section-title" style="margin-bottom:4px">Clock Hand Position</div>
+      <div id="clockDisplay" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    </div>
+  </div>
+
+  <!-- Playback + Scrubber -->
+  <div class="scrubber-wrap" id="scrubberWrap" style="display:none">
+    <div class="scrubber-label">
+      <span>Reference Step</span>
+      <span id="scrubLabel" style="color:var(--accent)">0/0</span>
+    </div>
+    <input type="range" class="scrubber" id="scrubber" min="0" value="0">
+  </div>
+
+  <div class="playback-bar" id="playbackBar" style="display:none">
+    <button class="btn btn-secondary btn-sm btn-icon" id="stepStartBtn">|⟨</button>
+    <button class="btn btn-secondary btn-sm btn-icon" id="stepBackBtn">⟨</button>
+    <button class="btn btn-primary btn-sm" id="playBtn" style="min-width:90px">▶ Play</button>
+    <button class="btn btn-secondary btn-sm btn-icon" id="stepFwdBtn">⟩</button>
+    <button class="btn btn-secondary btn-sm btn-icon" id="stepEndBtn">⟩|</button>
+    <div class="progress-bar w-full"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+    <div class="step-counter" id="stepCounter">0/0</div>
+    <div class="playback-speed">
+      <button class="speed-btn" data-spd="2">½×</button>
+      <button class="speed-btn active" data-spd="1">1×</button>
+      <button class="speed-btn" data-spd="0.5">2×</button>
+      <button class="speed-btn" data-spd="0.25">4×</button>
+    </div>
+  </div>
+
+  <!-- Metrics -->
+  <div id="metricsArea" style="display:none">
+    <div class="metrics-grid" id="metricsGrid"></div>
+  </div>
+
+  <!-- History Table -->
+  <div id="historyArea" style="display:none">
+    <div class="section-title" style="margin-bottom:8px">Step-by-Step History</div>
+    <div class="table-wrap">
+      <table class="hist-table">
+        <thead><tr><th>#</th><th>Page</th><th>Frames After</th><th>Result</th><th>Evicted</th><th>Why Evicted</th></tr></thead>
+        <tbody id="histBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Comparison Chart -->
+  <div id="compArea" style="display:none">
+    <div class="section-title" style="margin-bottom:10px">Algorithm Comparison (same input)</div>
+    <div id="compGrid" style="display:flex;flex-direction:column;gap:8px"></div>
+    <div style="font-size:.78rem;color:var(--muted);margin-top:8px" id="compSummary"></div>
+  </div>
+
+  <!-- Belady Anomaly Demo -->
+  <div id="beladyArea" style="display:none">
+    <div class="belady-demo">
+      <div class="panel-title" style="margin-bottom:8px">Bélady's Anomaly (FIFO)</div>
+      <div style="font-size:.82rem;color:#2d3191;margin-bottom:12px">For FIFO, more frames can cause MORE page faults — a counter-intuitive result!</div>
+      <div id="beladyRows"></div>
+    </div>
+  </div>
+
+  <!-- Teaching Summary -->
+  <div id="summaryArea" style="display:none">
+    <div class="section-title" style="margin-bottom:8px">📖 Teaching Summary</div>
+    <div id="summaryContent" style="font-size:.82rem;line-height:1.7;color:var(--muted)"></div>
+  </div>
+
+</main>
+
+<!-- ── Info Panel ───────────────────────────────────────── -->
+<aside class="info-panel" style="gap:12px">
+
+  <div>
+    <div class="section-title">Current Step</div>
+    <div id="stepCard" style="font-size:.82rem;color:var(--muted);padding:10px;background:var(--blue-1);border:1px solid var(--line);border-radius:var(--radius-md);line-height:1.6">
+      Run the simulation.
+    </div>
+  </div>
+
+  <hr>
+
+  <div>
+    <div class="section-title">Algorithm Explained</div>
+    <div id="algoCard" style="font-size:.78rem;color:var(--muted);line-height:1.6;padding:8px 10px;background:var(--blue-1);border:1px solid var(--line);border-radius:var(--radius-md)">
+      Select an algorithm.
+    </div>
+  </div>
+
+  <hr>
+
+  <div>
+    <div class="section-title">Quiz Score</div>
+    <div id="quizScoreDisp" style="font-size:.85rem;color:var(--muted)">Quiz mode off.</div>
+  </div>
+
+  <hr>
+
+  <div>
+    <div class="section-title">Page Fault Counter</div>
+    <div style="text-align:center">
+      <div style="font-size:2.5rem;font-weight:900;color:var(--disk-color)" id="faultCounter">0</div>
+      <div class="text-muted text-xs">faults so far</div>
+      <div style="font-size:1.2rem;font-weight:800;color:var(--mem-color);margin-top:4px" id="hitCounter">0</div>
+      <div class="text-muted text-xs">hits</div>
+    </div>
+  </div>
+</aside>
+
+</div>
+
+<!-- ── Quiz Overlay ──────────────────────────────────────── -->
+<div id="quizOverlay" style="display:none" class="quiz-overlay">
+  <div class="quiz-card">
+    <div style="font-size:1rem;font-weight:700;margin-bottom:12px" id="quizQ">Which page will be evicted?</div>
+    <div id="quizOpts" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px"></div>
+    <div id="quizResult" style="display:none;padding:10px;border-radius:var(--radius-md);font-size:.85rem;font-weight:600;margin-bottom:10px"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div id="quizScoreBox" style="font-size:.78rem;color:var(--muted)">Score: 0/0</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-secondary btn-sm" id="quizSkip">Skip</button>
+        <button class="btn btn-primary btn-sm" id="quizSubmit" style="display:none">Submit</button>
+        <button class="btn btn-primary btn-sm" id="quizContinue" style="display:none">Continue →</button>
       </div>
     </div>
-
-    <div class="form-group">
-      <label class="form-label">Number of Frames</label>
-      <input type="range" id="frameCount" min="1" max="7" value="3" oninput="document.getElementById('frameVal').textContent=this.value">
-      <div style="display:flex; justify-content:space-between; font-size:0.78rem">
-        <span class="text-muted">1</span>
-        <span style="font-weight:700; color:var(--accent)" id="frameVal">3</span>
-        <span class="text-muted">7</span>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label class="form-label">Page Reference String</label>
-      <input type="text" id="refInput" value="7 0 1 2 0 3 0 4 2 3 0 3 2" placeholder="e.g. 1 2 3 4 1 2 5">
-      <div class="form-hint">Space or comma separated page numbers (0–9)</div>
-    </div>
-
-    <div class="btn-group">
-      <button class="btn btn-secondary btn-sm" id="randomRefBtn">⚡ Random</button>
-    </div>
-
-    <div class="divider"></div>
-    <div class="btn-group" style="flex-wrap:nowrap">
-      <button class="btn btn-primary w-full" id="runBtn">▶ Simulate</button>
-      <button class="btn btn-secondary" id="resetBtn" title="Reset">↺</button>
-    </div>
-  </aside>
-
-  <!-- Main Panel -->
-  <main class="viz-panel">
-
-    <!-- Reference string display -->
-    <div class="card">
-      <div class="panel-title" style="margin-bottom:var(--space-3)">Page Reference String</div>
-      <div class="ref-string-display" id="refDisplay">
-        <span class="text-muted text-sm">Configure and click Simulate</span>
-      </div>
-    </div>
-
-    <!-- Frame state -->
-    <div class="card">
-      <div class="flex items-center justify-between" style="margin-bottom:var(--space-4)">
-        <div>
-          <div class="panel-title" style="margin:0">Frame State</div>
-          <div class="text-muted text-sm" id="algoLabel">First In First Out (FIFO)</div>
-        </div>
-        <div id="currentRefBadge" style="display:none">
-          <div class="badge badge-blue" id="curRefBadge">Page ?</div>
-        </div>
-      </div>
-      <div class="frame-grid" id="frameGrid">
-        <div class="text-muted text-sm">Run simulation to see frame states.</div>
-      </div>
-    </div>
-
-    <!-- Playback -->
-    <div class="playback-bar" id="playbackBar" style="display:none">
-      <button class="btn btn-secondary btn-sm btn-icon" id="stepBackBtn">⟨⟨</button>
-      <button class="btn btn-primary btn-sm" id="playBtn" style="min-width:90px">▶ Play</button>
-      <button class="btn btn-secondary btn-sm btn-icon" id="stepFwdBtn">⟩⟩</button>
-      <div class="progress-bar w-full"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
-      <div class="step-counter" id="stepCounter">0 / 0</div>
-      <div class="playback-speed">
-        <span class="text-xs text-muted">Speed:</span>
-        <button class="speed-btn" data-spd="2">0.5×</button>
-        <button class="speed-btn active" data-spd="1">1×</button>
-        <button class="speed-btn" data-spd="0.5">2×</button>
-        <button class="speed-btn" data-spd="0.25">4×</button>
-      </div>
-    </div>
-
-    <!-- Metrics -->
-    <div id="metricsArea" style="display:none">
-      <div class="metrics-grid" id="metricsGrid"></div>
-    </div>
-
-    <!-- Step History Table -->
-    <div id="historyArea" style="display:none">
-      <div class="section-title" style="margin-bottom:var(--space-3)">Step History</div>
-      <div class="table-wrap">
-        <table class="step-table">
-          <thead>
-            <tr><th>#</th><th>Page</th><th>Frames After</th><th>Result</th><th>Evicted</th></tr>
-          </thead>
-          <tbody id="historyBody"></tbody>
-        </table>
-      </div>
-    </div>
-  </main>
+  </div>
 </div>
 
 <script>
-// ── Theme ─────────────────────────────────────────────────
-const themeBtn = document.getElementById('themeBtn');
-const root = document.documentElement;
-const saved = localStorage.getItem('os-theme') || 'light';
-root.setAttribute('data-theme', saved);
-themeBtn.textContent = saved === 'dark' ? '☀️' : '🌙';
-themeBtn.addEventListener('click', () => {
-  const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-  root.setAttribute('data-theme', next);
-  themeBtn.textContent = next === 'dark' ? '☀️' : '🌙';
-  localStorage.setItem('os-theme', next);
-});
+// ── Theme ──────────────────────────────────────────────
+const themeBtn=document.getElementById('themeBtn');
+const root=document.documentElement;
+(function(){const s=localStorage.getItem('os-theme')||'light';root.setAttribute('data-theme',s);themeBtn.textContent=s==='dark'?'☀️':'🌙';})();
+themeBtn.onclick=()=>{const n=root.getAttribute('data-theme')==='dark'?'light':'dark';root.setAttribute('data-theme',n);themeBtn.textContent=n==='dark'?'☀️':'🌙';localStorage.setItem('os-theme',n);};
 
-const ALGO_NAMES = {
-  fifo: 'First In First Out (FIFO)',
-  lru: 'Least Recently Used (LRU)',
-  lfu: 'Least Frequently Used (LFU)',
-  optimal: 'Optimal (Bélády\'s Algorithm)',
-  clock: 'Clock / Second Chance'
+// ── State ──────────────────────────────────────────────
+let currentAlgo='fifo', simSteps=[], currentStep=0;
+let playing=false, playInterval=null, speedFactor=1;
+let quizMode=false, quizCorrect=0, quizTotal=0, pendingAnswer=null;
+let compareMode=false, beladyMode=false;
+
+const ALGO_INFO = {
+  fifo:'<strong>FIFO</strong> — First In, First Out<br>Evicts the page that has been in memory the <strong>longest</strong>. Simple but can suffer from <em>Bélady\'s Anomaly</em> (more frames → more faults with FIFO).',
+  lru:'<strong>LRU</strong> — Least Recently Used<br>Evicts the page that was used the <strong>least recently</strong>. Based on temporal locality. No Bélady\'s anomaly. Expensive to implement.',
+  lfu:'<strong>LFU</strong> — Least Frequently Used<br>Evicts the page with the <strong>lowest access frequency</strong>. Favors frequently-used pages. Can suffer from old pages with high past-frequency staying too long.',
+  optimal:'<strong>Optimal (Bélády)</strong> — Best possible<br>Evicts the page that will be used <strong>farthest in the future</strong>. Requires future knowledge — not implementable in real systems, but used as a benchmark.',
+  clock:'<strong>Second Chance (Clock)</strong> — Practical LRU approximation<br>Uses a reference bit. Pages with bit=1 get a second chance (bit set to 0, clock advances). Evicts first page with bit=0.'
 };
 
-let currentAlgo = 'fifo';
-let simSteps = [];
-let currentStep = 0;
-let playing = false;
-let playInterval = null;
-let speedFactor = 1;
-
-// ── Algorithm Selector ─────────────────────────────────────
-document.querySelectorAll('.algo-option').forEach(el => {
-  el.addEventListener('click', () => {
-    document.querySelectorAll('.algo-option').forEach(x => x.classList.remove('selected'));
-    el.classList.add('selected');
-    currentAlgo = el.dataset.algo;
-    document.getElementById('algoLabel').textContent = ALGO_NAMES[currentAlgo];
-  });
+// ── Algo tabs ──────────────────────────────────────────
+document.querySelectorAll('.algo-tab').forEach(tab=>{
+  tab.onclick=()=>{
+    document.querySelectorAll('.algo-tab').forEach(t=>t.classList.remove('active'));
+    tab.classList.add('active'); currentAlgo=tab.dataset.algo;
+    updateAlgoUI();
+  };
 });
 
-document.getElementById('randomRefBtn').addEventListener('click', () => {
-  const len = 12 + Math.floor(Math.random() * 8);
-  const refs = Array.from({ length: len }, () => Math.floor(Math.random() * 8));
-  document.getElementById('refInput').value = refs.join(' ');
-});
+function updateAlgoUI(){
+  const names={fifo:'First In First Out (FIFO)',lru:'Least Recently Used (LRU)',lfu:'Least Frequently Used (LFU)',optimal:"Optimal (Bélády's)",clock:'Second Chance (Clock)'};
+  document.getElementById('algoSubtitle').textContent=names[currentAlgo];
+  document.getElementById('algoCard').innerHTML=ALGO_INFO[currentAlgo];
+}
+updateAlgoUI();
 
-// ── Parse Input ───────────────────────────────────────────
-function parseRefs() {
-  return document.getElementById('refInput').value
-    .split(/[\s,]+/).map(Number).filter(n => !isNaN(n) && n >= 0);
+// ── Parse refs ─────────────────────────────────────────
+function parseRefs(){
+  const raw=document.getElementById('refInput').value;
+  const refs=raw.split(/[\s,]+/).map(Number).filter(n=>!isNaN(n)&&n>=0&&n<=99);
+  document.getElementById('refErr').textContent=refs.length<1?'Invalid reference string':'';
+  document.getElementById('refErr').classList.toggle('show',refs.length<1);
+  return refs;
 }
 
-// ── Algorithms ────────────────────────────────────────────
-function runFIFO(refs, nFrames) {
-  const frames = new Array(nFrames).fill(-1);
-  const steps = []; let faults = 0; let ptr = 0;
-  for (let i = 0; i < refs.length; i++) {
-    const page = refs[i];
-    const hit = frames.includes(page);
-    let evicted = -1;
-    if (!hit) {
-      faults++;
-      evicted = frames[ptr];
-      frames[ptr] = page;
-      ptr = (ptr + 1) % nFrames;
-    }
-    steps.push({ page, frames: [...frames], hit, evicted, extra: {} });
-  }
-  return { steps, faults };
-}
+// ── Algorithms ─────────────────────────────────────────
+function runAlgo(refs, nF, algo){
+  const frames=new Array(nF).fill(-1);
+  const steps=[]; let faults=0;
+  const fifoQ=[], lruOrder=[], freq={}, usebit=new Array(nF).fill(0);
+  let clockPtr=0;
 
-function runLRU(refs, nFrames) {
-  const frames = new Array(nFrames).fill(-1);
-  const lastUsed = {};
-  const steps = []; let faults = 0;
-  for (let i = 0; i < refs.length; i++) {
-    const page = refs[i];
-    const hit = frames.includes(page);
-    let evicted = -1;
-    if (!hit) {
+  for(let i=0;i<refs.length;i++){
+    const page=refs[i];
+    const hit=frames.includes(page);
+    let evicted=-1, whyEvict='', auxInfo={};
+
+    if(!hit){
       faults++;
-      const emptySlot = frames.indexOf(-1);
-      if (emptySlot !== -1) {
-        frames[emptySlot] = page;
+      const emptyIdx=frames.indexOf(-1);
+      if(emptyIdx!==-1){
+        frames[emptyIdx]=page;
+        if(algo==='fifo') fifoQ.push(page);
+        if(algo==='clock') usebit[emptyIdx]=1;
       } else {
-        let lruPage = -1, lruTime = Infinity;
-        frames.forEach(f => { if (lastUsed[f] < lruTime) { lruTime = lastUsed[f]; lruPage = f; } });
-        const idx = frames.indexOf(lruPage);
-        evicted = frames[idx]; frames[idx] = page;
-      }
-    }
-    lastUsed[page] = i;
-    steps.push({ page, frames: [...frames], hit, evicted, extra: { lastUsed: { ...lastUsed } } });
-  }
-  return { steps, faults };
-}
-
-function runLFU(refs, nFrames) {
-  const frames = new Array(nFrames).fill(-1);
-  const freq = {};
-  const lastUsed = {};
-  const steps = []; let faults = 0;
-  for (let i = 0; i < refs.length; i++) {
-    const page = refs[i];
-    const hit = frames.includes(page);
-    let evicted = -1;
-    if (!hit) {
-      faults++;
-      const emptySlot = frames.indexOf(-1);
-      if (emptySlot !== -1) {
-        frames[emptySlot] = page;
-      } else {
-        let lfuPage = -1, lfuFreq = Infinity, lfuTime = Infinity;
-        frames.forEach(f => {
-          const fc = freq[f] || 0;
-          if (fc < lfuFreq || (fc === lfuFreq && lastUsed[f] < lfuTime)) {
-            lfuFreq = fc; lfuTime = lastUsed[f] || 0; lfuPage = f;
+        if(algo==='fifo'){
+          evicted=fifoQ.shift();
+          const idx=frames.indexOf(evicted);
+          frames[idx]=page; fifoQ.push(page);
+          whyEvict=`P${evicted} was loaded first (longest in memory)`;
+        } else if(algo==='lru'){
+          // Evict least recently used
+          let lruPage=-1, lruTime=Infinity;
+          frames.forEach(f=>{ if(lruOrder.lastIndexOf(f)<lruTime){lruTime=lruOrder.lastIndexOf(f);lruPage=f;} });
+          const idx2=frames.indexOf(lruPage);
+          evicted=lruPage; frames[idx2]=page;
+          whyEvict=`P${evicted} was used least recently (last use: step ${lruOrder.lastIndexOf(evicted)+1})`;
+        } else if(algo==='lfu'){
+          // Evict lowest frequency, tie=LRU
+          let lfuPage=-1, lfuF=Infinity, lfuT=Infinity;
+          frames.forEach(f=>{
+            const fc=freq[f]||0;
+            const lt=lruOrder.lastIndexOf(f);
+            if(fc<lfuF||(fc===lfuF&&lt<lfuT)){lfuF=fc;lfuT=lt;lfuPage=f;}
+          });
+          const idx3=frames.indexOf(lfuPage);
+          evicted=lfuPage; frames[idx3]=page;
+          whyEvict=`P${evicted} had lowest frequency (${freq[evicted]||0} uses)`;
+        } else if(algo==='optimal'){
+          let farthest=-1, farthestIdx=-1;
+          frames.forEach((f,idx)=>{
+            const nextUse=refs.indexOf(f,i+1);
+            const dist=nextUse===-1?Infinity:nextUse;
+            if(dist>farthest){farthest=dist;farthestIdx=idx;}
+          });
+          evicted=frames[farthestIdx]; frames[farthestIdx]=page;
+          const nextUse2=refs.indexOf(evicted,i+1);
+          whyEvict=nextUse2===-1?`P${evicted} is never used again`:`P${evicted} won't be used until step ${nextUse2+1} (farthest)`;
+        } else if(algo==='clock'){
+          // Clock algorithm
+          while(true){
+            if(usebit[clockPtr]===0){
+              evicted=frames[clockPtr]; frames[clockPtr]=page;
+              usebit[clockPtr]=1; clockPtr=(clockPtr+1)%nF;
+              break;
+            } else {
+              usebit[clockPtr]=0; clockPtr=(clockPtr+1)%nF;
+            }
           }
-        });
-        const idx = frames.indexOf(lfuPage);
-        evicted = frames[idx]; frames[idx] = page;
-      }
-      freq[page] = 0;
-    }
-    freq[page] = (freq[page] || 0) + 1;
-    lastUsed[page] = i;
-    steps.push({ page, frames: [...frames], hit, evicted, extra: { freq: { ...freq } } });
-  }
-  return { steps, faults };
-}
-
-function runOptimal(refs, nFrames) {
-  const frames = new Array(nFrames).fill(-1);
-  const steps = []; let faults = 0;
-  for (let i = 0; i < refs.length; i++) {
-    const page = refs[i];
-    const hit = frames.includes(page);
-    let evicted = -1;
-    if (!hit) {
-      faults++;
-      const emptySlot = frames.indexOf(-1);
-      if (emptySlot !== -1) {
-        frames[emptySlot] = page;
-      } else {
-        // Find page used farthest in future
-        let farthest = -1, farthestIdx = -1;
-        frames.forEach((f, idx) => {
-          const nextUse = refs.indexOf(f, i + 1);
-          const dist = nextUse === -1 ? Infinity : nextUse;
-          if (dist > farthest) { farthest = dist; farthestIdx = idx; }
-        });
-        evicted = frames[farthestIdx];
-        frames[farthestIdx] = page;
+          whyEvict=`P${evicted} had reference bit=0 (given second chance and bit cleared, then evicted)`;
+        }
+        // Remove evicted from tracking
+        const ei=fifoQ.indexOf(evicted); if(ei!==-1) fifoQ.splice(ei,1);
+        while(lruOrder.indexOf(evicted)!==-1) lruOrder.splice(lruOrder.indexOf(evicted),1);
       }
     }
-    steps.push({ page, frames: [...frames], hit, evicted, extra: {} });
-  }
-  return { steps, faults };
-}
-
-function runClock(refs, nFrames) {
-  const frames = new Array(nFrames).fill(-1);
-  const useBit = new Array(nFrames).fill(0);
-  const steps = []; let faults = 0; let ptr = 0;
-  for (let i = 0; i < refs.length; i++) {
-    const page = refs[i];
-    const idx = frames.indexOf(page);
-    const hit = idx !== -1;
-    let evicted = -1;
-    if (!hit) {
-      faults++;
-      // Find victim
-      while (true) {
-        if (useBit[ptr] === 0) break;
-        useBit[ptr] = 0; ptr = (ptr + 1) % nFrames;
-      }
-      evicted = frames[ptr];
-      frames[ptr] = page;
-      useBit[ptr] = 1;
-      ptr = (ptr + 1) % nFrames;
-    } else {
-      useBit[idx] = 1;
+    // Update LRU order
+    const li=lruOrder.indexOf(page); if(li!==-1) lruOrder.splice(li,1);
+    lruOrder.push(page);
+    // Update clock use bit on hit
+    if(hit && algo==='clock'){
+      const ci=frames.indexOf(page);
+      if(ci!==-1) usebit[ci]=1;
     }
-    steps.push({ page, frames: [...frames], hit, evicted, extra: { useBit: [...useBit], ptr } });
+    // Update freq
+    freq[page]=(freq[page]||0)+1;
+
+    // Build lookahead for optimal
+    let lookahead=[];
+    if(algo==='optimal'){
+      const futureRefs=refs.slice(i+1,i+8);
+      lookahead=frames.filter(f=>f!==-1).map(f=>{
+        const nextUse=refs.indexOf(f,i+1);
+        return {page:f,nextUse,isTarget:f===page};
+      }).sort((a,b)=>{
+        if(a.nextUse===-1) return -1;
+        if(b.nextUse===-1) return 1;
+        return b.nextUse-a.nextUse;
+      });
+    }
+
+    steps.push({
+      step:i+1, page, frames:[...frames], hit, evicted, whyEvict,
+      faults, hits:i+1-faults,
+      fifoQ:[...fifoQ],
+      lruOrder:[...lruOrder],
+      freq:{...freq},
+      usebit:[...usebit],
+      clockPtr,
+      lookahead:[...lookahead],
+    });
   }
-  return { steps, faults };
+  return steps;
 }
 
-function simulate() {
-  const refs = parseRefs();
-  const nFrames = parseInt(document.getElementById('frameCount').value);
-  if (!refs.length) return null;
-  switch (currentAlgo) {
-    case 'fifo': return runFIFO(refs, nFrames);
-    case 'lru': return runLRU(refs, nFrames);
-    case 'lfu': return runLFU(refs, nFrames);
-    case 'optimal': return runOptimal(refs, nFrames);
-    case 'clock': return runClock(refs, nFrames);
-  }
-}
-
-// ── Render ────────────────────────────────────────────────
-function renderRefString(refs, stepIdx) {
-  const display = document.getElementById('refDisplay');
-  display.innerHTML = refs.map((r, i) => {
-    let cls = '';
-    if (i < stepIdx) cls = simSteps[i].hit ? 'done-hit' : 'done-fault';
-    else if (i === stepIdx) cls = 'current';
-    return `<div class="ref-token ${cls}" title="${simSteps[i] ? (simSteps[i].hit ? 'HIT' : 'FAULT') : ''}">${r}</div>`;
+// ── Render ─────────────────────────────────────────────
+function renderRefString(refs, stepIdx){
+  const display=document.getElementById('refDisplay');
+  if(!refs.length){display.innerHTML='<span class="text-muted text-sm">Configure and click Simulate</span>';return;}
+  display.innerHTML=refs.map((r,i)=>{
+    let cls='';
+    if(i<stepIdx-1) cls=simSteps[i]?.hit?'hit':'fault';
+    else if(i===stepIdx-1) cls='current';
+    return `<div class="ref-token ${cls}" onclick="jumpToStep(${i+1})" title="${simSteps[i]?simSteps[i].hit?'HIT':'FAULT':''}">${r}</div>`;
   }).join('');
+  // Scroll current into view
+  const cur=display.querySelector('.current');
+  if(cur) cur.scrollIntoView({block:'nearest',inline:'center'});
 }
 
-function renderFrames(step, nFrames) {
-  const grid = document.getElementById('frameGrid');
-  if (!step) { grid.innerHTML = '<div class="text-muted text-sm">Run simulation to see frame states.</div>'; return; }
+function jumpToStep(s){ stopPlay(); currentStep=s; updateDisplay(s); }
 
-  const html = step.frames.map((page, i) => {
-    let cls = page === -1 ? 'empty' : '';
-    if (page !== -1) {
-      // Check if this is newly loaded or was just evicted
-      if (page === step.page && !step.hit) cls = 'fault';
-      else if (page === step.page && step.hit) cls = 'hit';
+function renderFrames(step, nF){
+  const disp=document.getElementById('framesDisplay');
+  if(!step){disp.innerHTML='<div class="text-muted text-sm">Run simulation.</div>';return;}
+  disp.innerHTML=step.frames.map((p,i)=>{
+    const isEmpty=p===-1;
+    let cls=isEmpty?'empty':'';
+    if(!isEmpty){
+      if(p===step.page && step.hit) cls='hit';
+      else if(p===step.page && !step.hit) cls='fault';
+      else if(p===step.evicted) cls='evict';
     }
-    const freq = step.extra.freq ? step.extra.freq[page] || '' : '';
-    const use = step.extra.useBit ? `<span class="use-badge">${step.extra.useBit[i]}</span>` : '';
-    const freqBadge = freq ? `<span class="freq-badge">f:${freq}</span>` : '';
-    const text = page === -1 ? 'empty' : page;
-    return `<div class="frame-col">
-      <div class="frame-head">F${i}</div>
-      <div class="frame-cell ${cls}">${text}${use}${freqBadge}</div>
+    const freq=step.freq?.[p]||0;
+    const usebit=step.usebit?.[i];
+    const isPtr=step.clockPtr-1===i || (step.clockPtr===0 && i===nF-1);
+    const meta = currentAlgo==='lfu'&&!isEmpty ? `<span class="fc-meta fc-top" style="background:var(--disk-light);color:#8b2500">f:${freq}</span>` :
+      currentAlgo==='clock'&&!isEmpty ? `<span class="fc-meta fc-top" style="background:${usebit?'var(--mem-light)':'var(--disk-light)'};color:${usebit?'#135b49':'#8b2500'}">${usebit}</span>` :
+      currentAlgo==='lru'&&!isEmpty ? `<span class="fc-meta fc-bot">#${step.lruOrder?.indexOf(p)+1}</span>` : '';
+    const ptrMark = currentAlgo==='clock' ? `<span class="fc-meta fc-ptr">${i===step.clockPtr?'▶':''}</span>` : '';
+    return `<div class="frame-column">
+      <div class="frame-header">F${i}</div>
+      <div class="frame-cell ${cls}">${isEmpty?'empty':p}${meta}${ptrMark}</div>
     </div>`;
   }).join('');
 
-  grid.innerHTML = `<div style="display:flex; gap:10px">${html}</div>`;
-}
-
-function renderHistoryTable(refs, steps, upTo) {
-  const body = document.getElementById('historyBody');
-  body.innerHTML = steps.slice(0, upTo).map((s, i) => {
-    const rowCls = s.hit ? 'hit-row' : 'fault-row';
-    const framesStr = s.frames.map(f => f === -1 ? '—' : f).join(', ');
-    const indicator = s.hit
-      ? '<span class="fault-indicator hit">H</span>'
-      : '<span class="fault-indicator fault">F</span>';
-    return `<tr class="${rowCls}">
-      <td>${i + 1}</td>
-      <td><strong>${refs[i]}</strong></td>
-      <td><code>${framesStr}</code></td>
-      <td>${indicator} ${s.hit ? '<span style="color:var(--mem-color);font-weight:700">HIT</span>' : '<span style="color:var(--disk-color);font-weight:700">FAULT</span>'}</td>
-      <td>${s.evicted !== -1 ? s.evicted : '—'}</td>
-    </tr>`;
-  }).join('');
-}
-
-function updateDisplay(stepIdx) {
-  const refs = parseRefs();
-  const nFrames = parseInt(document.getElementById('frameCount').value);
-  const step = stepIdx > 0 ? simSteps[stepIdx - 1] : null;
-
-  renderRefString(refs, stepIdx - 1);
-  renderFrames(step, nFrames);
-  renderHistoryTable(refs, simSteps, stepIdx);
-
-  // Update current ref badge
-  if (stepIdx > 0) {
-    document.getElementById('curRefBadge').textContent = `Page ${refs[stepIdx - 1]}`;
-    document.getElementById('currentRefBadge').style.display = '';
+  // FIFO queue
+  document.getElementById('fifoQueueWrap').style.display=currentAlgo==='fifo'?'':'none';
+  if(currentAlgo==='fifo' && step.fifoQ){
+    document.getElementById('fifoQueue').innerHTML=step.fifoQ.map((p,i)=>`
+      <div class="fq-item ${i===0?'oldest':''}" title="${i===0?'This page will be evicted next':''}">${p}${i===0?'<span style="font-size:.65rem;margin-left:3px">⬅</span>':''}</div>
+      ${i<step.fifoQ.length-1?'<span style="color:var(--muted)">←</span>':''}
+    `).join('');
   }
 
-  const pct = simSteps.length ? (stepIdx / simSteps.length * 100) : 0;
-  document.getElementById('progressFill').style.width = pct + '%';
-  document.getElementById('stepCounter').textContent = `${stepIdx} / ${simSteps.length}`;
+  // LRU order
+  document.getElementById('lruOrderWrap').style.display=currentAlgo==='lru'?'':'none';
+  if(currentAlgo==='lru' && step.lruOrder){
+    const inFrames=step.lruOrder.filter(p=>step.frames.includes(p));
+    document.getElementById('lruOrder').innerHTML=inFrames.map((p,i)=>`
+      <div class="fq-item ${i===0?'oldest':''}">${p}${i===0?'<span style="font-size:.65rem;margin-left:3px">evict</span>':''}</div>
+      ${i<inFrames.length-1?'<span style="color:var(--muted);font-size:.8rem">←</span>':''}
+    `).join('');
+  }
+
+  // LFU freq
+  document.getElementById('lfuFreqWrap').style.display=currentAlgo==='lfu'?'':'none';
+  if(currentAlgo==='lfu' && step.freq){
+    const inFrames=step.frames.filter(p=>p!==-1);
+    document.getElementById('lfuFreq').innerHTML=inFrames.map(p=>`
+      <div style="background:var(--blue-1);border:1px solid var(--line);border-radius:var(--radius-sm);padding:4px 10px;text-align:center;font-size:.78rem">
+        <div style="font-weight:800">${p}</div>
+        <div style="color:var(--muted);font-size:.68rem">freq:${step.freq[p]||0}</div>
+      </div>
+    `).join('');
+  }
+
+  // Optimal lookahead
+  document.getElementById('optLookaheadWrap').style.display=currentAlgo==='optimal'?'':'none';
+  if(currentAlgo==='optimal' && step.lookahead?.length){
+    document.getElementById('lookahead').innerHTML=`<span style="font-size:.72rem;color:var(--muted);margin-right:4px">Next use (pages in frames):</span>`+step.lookahead.map(la=>
+      `<div class="la-token ${la.nextUse===-1?'not-found':la.isTarget?'target':''}" title="Page ${la.page}: ${la.nextUse===-1?'never used again':'next use at step '+la.nextUse}">
+        p${la.page}:${la.nextUse===-1?'∞':la.nextUse}
+      </div>`
+    ).join('');
+  }
+
+  // Clock
+  document.getElementById('clockWrap').style.display=currentAlgo==='clock'?'':'none';
+  if(currentAlgo==='clock'){
+    document.getElementById('clockDisplay').innerHTML=step.frames.map((p,i)=>`
+      <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+        <div style="font-size:.65rem;color:var(--muted)">F${i} ${i===step.clockPtr?'◀':''}</div>
+        <div style="background:${step.usebit[i]?'var(--mem-light)':'var(--blue-1)'};border:1px solid ${step.usebit[i]?'var(--mem-color)':'var(--line)'};border-radius:var(--radius-sm);padding:4px 8px;font-size:.78rem;font-weight:700">
+          ${p===-1?'—':p} <span style="font-size:.65rem;color:${step.usebit[i]?'var(--mem-color)':'var(--muted)'}">[${step.usebit[i]||0}]</span>
+        </div>
+      </div>
+    `).join('');
+  }
 }
 
-// ── Run ───────────────────────────────────────────────────
-document.getElementById('runBtn').addEventListener('click', () => {
+function renderHistTable(upTo){
+  const body=document.getElementById('histBody');
+  body.innerHTML=simSteps.slice(0,upTo).map((s,i)=>{
+    const cls=s.hit?'hit':'fault';
+    const isCur=i===upTo-1?'current-row':'';
+    const frames=s.frames.map(f=>f===-1?'—':f).join(', ');
+    return `<tr class="hist-row ${cls} ${isCur}">
+      <td>${s.step}</td>
+      <td><strong>${s.page}</strong></td>
+      <td><code style="font-size:.72rem">${frames}</code></td>
+      <td>${s.hit?'<span class="hit-badge">HIT</span>':'<span class="fault-badge">FAULT</span>'}</td>
+      <td>${s.evicted!==-1?s.evicted:'—'}</td>
+      <td style="font-size:.72rem;color:var(--muted);max-width:180px">${s.whyEvict||'—'}</td>
+    </tr>`;
+  }).join('');
+  const cur=body.querySelector('.current-row');
+  if(cur) cur.scrollIntoView({block:'nearest'});
+}
+
+function updateDisplay(stepIdx){
+  const step=stepIdx>0?simSteps[stepIdx-1]:null;
+  const refs=parseRefs();
+  const nF=parseInt(document.getElementById('frameInput').value)||3;
+
+  renderRefString(refs,stepIdx);
+  renderFrames(step,nF);
+  renderHistTable(stepIdx);
+
+  const pct=simSteps.length?(stepIdx/simSteps.length*100):0;
+  document.getElementById('progressFill').style.width=pct+'%';
+  document.getElementById('stepCounter').textContent=`${stepIdx}/${simSteps.length}`;
+  document.getElementById('scrubber').value=stepIdx;
+  document.getElementById('scrubLabel').textContent=`${stepIdx}/${simSteps.length}`;
+
+  if(step){
+    document.getElementById('faultCounter').textContent=step.faults;
+    document.getElementById('hitCounter').textContent=step.hits;
+    const isHit=step.hit;
+    document.getElementById('hitBadge').style.display=isHit?'':'none';
+    document.getElementById('faultBadge').style.display=isHit?'none':'';
+
+    document.getElementById('stepCard').innerHTML=`
+      <div style="font-size:.72rem;color:var(--muted);margin-bottom:4px">Step ${step.step} / ${simSteps.length}</div>
+      <div style="margin-bottom:6px">Referencing page <strong style="font-size:1.1rem">${step.page}</strong></div>
+      <div style="font-weight:700;color:${isHit?'var(--mem-color)':'var(--disk-color)'}">${isHit?'✓ PAGE HIT':'✗ PAGE FAULT'}</div>
+      ${!isHit&&step.evicted!==-1?`<div style="font-size:.78rem;color:var(--muted);margin-top:6px">Evicted: P<strong>${step.evicted}</strong></div><div style="font-size:.72rem;color:var(--muted)">${step.whyEvict}</div>`:''}
+    `;
+  }
+
+  // Quiz check
+  if(quizMode && step && !step.hit && step.evicted!==-1){
+    // This is a fault with eviction — good quiz moment
+    showQuiz(step, stepIdx);
+  }
+}
+
+// ── Run ────────────────────────────────────────────────
+document.getElementById('runBtn').onclick=run;
+function run(){
   stopPlay();
-  const result = simulate();
-  if (!result) return;
-  simSteps = result.steps;
-  const refs = parseRefs();
-  currentStep = simSteps.length;
+  const refs=parseRefs();
+  const nF=parseInt(document.getElementById('frameInput').value)||3;
+  if(!refs.length) return;
 
-  document.getElementById('playbackBar').style.display = 'flex';
-  document.getElementById('metricsArea').style.display = 'block';
-  document.getElementById('historyArea').style.display = 'block';
+  simSteps=runAlgo(refs,nF,currentAlgo);
+  currentStep=simSteps.length;
 
-  // Metrics
-  const faults = result.faults;
-  const hits = simSteps.length - faults;
-  const hitRatio = (hits / simSteps.length * 100).toFixed(1);
-  document.getElementById('metricsGrid').innerHTML = `
+  document.getElementById('playbackBar').style.display='flex';
+  document.getElementById('scrubberWrap').style.display='';
+  document.getElementById('metricsArea').style.display='';
+  document.getElementById('historyArea').style.display='';
+
+  const scrubber=document.getElementById('scrubber');
+  scrubber.max=simSteps.length;
+
+  const faults=simSteps[simSteps.length-1]?.faults||0;
+  const hits=simSteps.length-faults;
+  const hr=(hits/simSteps.length*100).toFixed(1);
+  document.getElementById('metricsGrid').innerHTML=`
     <div class="metric-card"><div class="metric-value" style="color:var(--disk-color)">${faults}</div><div class="metric-label">Page Faults</div></div>
     <div class="metric-card"><div class="metric-value" style="color:var(--mem-color)">${hits}</div><div class="metric-label">Page Hits</div></div>
-    <div class="metric-card"><div class="metric-value" style="color:var(--accent)">${hitRatio}%</div><div class="metric-label">Hit Ratio</div></div>
-    <div class="metric-card"><div class="metric-value" style="color:var(--ink)">${simSteps.length}</div><div class="metric-label">Total Refs</div></div>
+    <div class="metric-card"><div class="metric-value" style="color:var(--accent)">${hr}%</div><div class="metric-label">Hit Ratio</div></div>
+    <div class="metric-card"><div class="metric-value">${simSteps.length}</div><div class="metric-label">References</div></div>
   `;
 
   updateDisplay(currentStep);
-});
-
-// ── Playback ──────────────────────────────────────────────
-document.getElementById('stepBackBtn').addEventListener('click', () => {
-  stopPlay(); if (currentStep > 0) { currentStep--; updateDisplay(currentStep); }
-});
-document.getElementById('stepFwdBtn').addEventListener('click', () => {
-  stopPlay(); if (currentStep < simSteps.length) { currentStep++; updateDisplay(currentStep); }
-});
-
-function stopPlay() {
-  clearInterval(playInterval); playing = false;
-  document.getElementById('playBtn').textContent = '▶ Play';
+  if(compareMode) runComparison();
+  renderSummary(refs, nF, faults, hits);
+  document.getElementById('summaryArea').style.display='';
 }
-document.getElementById('playBtn').addEventListener('click', () => {
-  if (playing) { stopPlay(); return; }
-  if (currentStep >= simSteps.length) currentStep = 0;
-  playing = true;
-  document.getElementById('playBtn').textContent = '⏸ Pause';
-  playInterval = setInterval(() => {
-    if (currentStep >= simSteps.length) { stopPlay(); return; }
-    currentStep++; updateDisplay(currentStep);
-  }, 700 * speedFactor);
-});
 
-document.querySelectorAll('.speed-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.speed-btn').forEach(x => x.classList.remove('active'));
-    btn.classList.add('active');
-    speedFactor = parseFloat(btn.dataset.spd);
-    if (playing) { stopPlay(); document.getElementById('playBtn').click(); }
+// ── Playback ───────────────────────────────────────────
+document.getElementById('stepBackBtn').onclick=()=>{ stopPlay(); if(currentStep>0){currentStep--;updateDisplay(currentStep);} };
+document.getElementById('stepFwdBtn').onclick=()=>{ stopPlay(); if(currentStep<simSteps.length){currentStep++;updateDisplay(currentStep);} };
+document.getElementById('stepStartBtn').onclick=()=>{ stopPlay(); currentStep=0; updateDisplay(0); };
+document.getElementById('stepEndBtn').onclick=()=>{ stopPlay(); currentStep=simSteps.length; updateDisplay(simSteps.length); };
+function stopPlay(){ clearInterval(playInterval); playing=false; document.getElementById('playBtn').textContent='▶ Play'; }
+document.getElementById('playBtn').onclick=()=>{
+  if(playing){stopPlay();return;}
+  if(currentStep>=simSteps.length) currentStep=0;
+  playing=true; document.getElementById('playBtn').textContent='⏸ Pause';
+  playInterval=setInterval(()=>{ if(currentStep>=simSteps.length){stopPlay();return;} currentStep++;updateDisplay(currentStep); },600*speedFactor);
+};
+document.querySelectorAll('.speed-btn').forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll('.speed-btn').forEach(x=>x.classList.remove('active'));
+    btn.classList.add('active'); speedFactor=parseFloat(btn.dataset.spd);
+    if(playing){stopPlay();document.getElementById('playBtn').click();}
+  };
+});
+document.getElementById('scrubber').oninput=function(){ stopPlay(); currentStep=parseInt(this.value); updateDisplay(currentStep); };
+
+// ── Comparison ─────────────────────────────────────────
+document.getElementById('compareBtn').onclick=function(){
+  compareMode=!compareMode; this.classList.toggle('active',compareMode);
+  if(compareMode&&simSteps.length) runComparison();
+  else document.getElementById('compArea').style.display='none';
+};
+
+function runComparison(){
+  const refs=parseRefs();
+  const nF=parseInt(document.getElementById('frameInput').value)||3;
+  const algos=['fifo','lru','lfu','optimal','clock'];
+  const results=algos.map(a=>{
+    const steps=runAlgo(refs,nF,a);
+    const faults=steps[steps.length-1]?.faults||0;
+    return {algo:a,faults,hits:refs.length-faults};
   });
+  const minF=Math.min(...results.map(r=>r.faults));
+  const maxF=Math.max(...results.map(r=>r.faults));
+  const names={fifo:'FIFO',lru:'LRU',lfu:'LFU',optimal:'Optimal',clock:'2nd Chance'};
+  document.getElementById('compArea').style.display='';
+  document.getElementById('compGrid').innerHTML=results.map(r=>{
+    const pct=maxF>0?(r.faults/maxF*100):0;
+    const isBest=r.faults===minF;
+    return `<div style="display:flex;align-items:center;gap:10px;font-size:.82rem">
+      <div style="min-width:90px;font-weight:${isBest?800:500};color:${isBest?'var(--mem-color)':''}">${names[r.algo]}${isBest?' ✓':''}</div>
+      <div style="flex:1"><div class="comp-bar-h" style="width:${Math.max(pct,10)}%;background:${isBest?'var(--mem-color)':'var(--disk-color)'};">${r.faults} faults</div></div>
+      <div style="min-width:60px;text-align:right;color:var(--muted)">${((r.hits/refs.length)*100).toFixed(1)}% hits</div>
+    </div>`;
+  }).join('');
+  const best=results.find(r=>r.faults===minF);
+  const worst=results.find(r=>r.faults===maxF);
+  document.getElementById('compSummary').innerHTML=`<strong style="color:var(--mem-color)">${names[best.algo]}</strong> performed best (${best.faults} faults). <strong style="color:var(--disk-color)">${names[worst.algo]}</strong> performed worst (${worst.faults} faults) with ${nF} frames.`;
+}
+
+// ── Bélady's Anomaly ───────────────────────────────────
+document.getElementById('beladyBtn').onclick=function(){
+  beladyMode=!beladyMode; this.classList.toggle('active',beladyMode);
+  document.getElementById('beladyArea').style.display=beladyMode?'':'none';
+  if(beladyMode) showBeladyDemo();
+};
+function showBeladyDemo(){
+  const refs=[1,2,3,4,1,2,5,1,2,3,4,5];
+  document.getElementById('refInput').value=refs.join(' ');
+  const rows=[];
+  for(let f=1;f<=6;f++){
+    const steps=runAlgo(refs,f,'fifo');
+    const faults=steps[steps.length-1]?.faults||0;
+    rows.push({frames:f,faults});
+  }
+  const maxF=Math.max(...rows.map(r=>r.faults));
+  document.getElementById('beladyRows').innerHTML=rows.map((r,i)=>{
+    const prev=rows[i-1];
+    const worse=prev&&r.faults>prev.faults;
+    return `<div class="belady-row">
+      <span style="min-width:60px;font-weight:700">${r.frames} frames</span>
+      <div style="flex:1;background:rgba(255,255,255,.3);border-radius:4px;overflow:hidden;height:20px">
+        <div style="height:100%;background:${worse?'#ef4444':'#22a06b'};width:${r.faults/maxF*100}%;border-radius:4px;display:flex;align-items:center;padding-left:6px;font-size:.7rem;font-weight:700;color:#fff">${r.faults}</div>
+      </div>
+      ${worse?'<span style="color:#ef4444;font-size:.75rem;font-weight:800;margin-left:8px">⚠ MORE FAULTS!</span>':''}
+    </div>`;
+  }).join('');
+}
+
+// ── Frame count comparison ─────────────────────────────
+function compareFrames(f1,f2){
+  const refs=parseRefs();
+  if(!refs.length) return;
+  const r1=runAlgo(refs,f1,currentAlgo);
+  const r2=runAlgo(refs,f2,currentAlgo);
+  const fa1=r1[r1.length-1]?.faults||0;
+  const fa2=r2[r2.length-1]?.faults||0;
+  const anomaly=currentAlgo==='fifo'&&fa2>fa1;
+  document.getElementById('frameCompResult').innerHTML=`
+    ${f1} frames: <strong style="color:var(--disk-color)">${fa1} faults</strong> &nbsp;|&nbsp;
+    ${f2} frames: <strong style="color:${fa2<fa1?'var(--mem-color)':'var(--disk-color)'}">${fa2} faults</strong>
+    ${anomaly?`<br><span style="color:#ef4444;font-weight:700">⚠ Bélády's Anomaly! More frames = more faults (FIFO).</span>`:''}
+  `;
+}
+
+// ── Quiz ───────────────────────────────────────────────
+document.getElementById('quizBtn').onclick=function(){
+  quizMode=!quizMode; this.classList.toggle('active',quizMode);
+  quizCorrect=0; quizTotal=0;
+  document.getElementById('quizScoreDisp').textContent=quizMode?`Score: 0/0`:'Quiz mode off.';
+};
+
+function showQuiz(step, stepIdx){
+  if(!quizMode||step.evicted===-1) return;
+  stopPlay();
+  const overlay=document.getElementById('quizOverlay');
+  overlay.style.display='flex';
+  const opts=[...step.frames.filter(f=>f!==-1), step.page].filter((v,i,a)=>a.indexOf(v)===i&&v!==step.page);
+  document.getElementById('quizQ').innerHTML=`At step ${step.step}: Page <strong>${step.page}</strong> causes a fault.<br>Which page will be evicted?`;
+  const correct=step.evicted;
+  document.getElementById('quizOpts').innerHTML=[...new Set([...opts,correct])].map(p=>`
+    <div class="quiz-opt" onclick="selectQuizOpt(this,${p},${correct})">Page ${p}</div>
+  `).join('');
+  document.getElementById('quizResult').style.display='none';
+  document.getElementById('quizSubmit').style.display='none';
+  document.getElementById('quizContinue').style.display='none';
+  pendingAnswer=null; quizTotal++;
+  document.getElementById('quizScoreBox').textContent=`Score: ${quizCorrect}/${quizTotal}`;
+  document.getElementById('quizScoreDisp').textContent=`Score: ${quizCorrect}/${quizTotal}`;
+}
+
+function selectQuizOpt(el,p,correct){
+  document.querySelectorAll('.quiz-opt').forEach(x=>{x.classList.remove('selected');});
+  el.classList.add('selected'); pendingAnswer=p;
+  document.getElementById('quizSubmit').style.display='';
+}
+
+document.getElementById('quizSubmit').onclick=()=>{
+  if(pendingAnswer===null) return;
+  const step=simSteps[currentStep-1];
+  const correct=step?.evicted;
+  const isOk=pendingAnswer===correct;
+  if(isOk) quizCorrect++;
+  const res=document.getElementById('quizResult');
+  res.style.display='';
+  res.className=`quiz-result ${isOk?'correct':'wrong'}`;
+  res.innerHTML=isOk?`✓ Correct! ${step.whyEvict}`:
+    `✗ Incorrect. Page ${correct} is evicted. ${step.whyEvict}`;
+  document.querySelectorAll('.quiz-opt').forEach(el=>{
+    const p=parseInt(el.textContent.replace('Page ',''));
+    el.classList.add(p===correct?'correct':'wrong');
+  });
+  document.getElementById('quizSubmit').style.display='none';
+  document.getElementById('quizContinue').style.display='';
+  document.getElementById('quizScoreBox').textContent=`Score: ${quizCorrect}/${quizTotal}`;
+  document.getElementById('quizScoreDisp').textContent=`Score: ${quizCorrect}/${quizTotal}`;
+};
+document.getElementById('quizSkip').onclick=()=>{ document.getElementById('quizOverlay').style.display='none'; };
+document.getElementById('quizContinue').onclick=()=>{ document.getElementById('quizOverlay').style.display='none'; };
+
+// ── Summary ────────────────────────────────────────────
+function renderSummary(refs, nF, faults, hits){
+  const hr=(hits/refs.length*100).toFixed(1);
+  const names={fifo:'FIFO',lru:'LRU',lfu:'LFU',optimal:'Optimal',clock:'Second Chance'};
+  const qual=faults/refs.length;
+  let perf=qual<.2?'excellent':qual<.4?'good':qual<.6?'average':'poor';
+  document.getElementById('summaryContent').innerHTML=`
+    <strong>${names[currentAlgo]}</strong> with <strong>${nF} frames</strong> on <strong>${refs.length} references</strong>:<br>
+    → <strong style="color:var(--disk-color)">${faults} page faults</strong> (${(100-parseFloat(hr)).toFixed(1)}% fault rate)<br>
+    → <strong style="color:var(--mem-color)">${hits} hits</strong> (${hr}% hit ratio)<br>
+    → Performance: <strong>${perf}</strong><br><br>
+    ${currentAlgo==='fifo'?'<em>Note: FIFO may exhibit Bélády\'s Anomaly — try the demo above.</em>':''}
+    ${currentAlgo==='optimal'?'<em>Optimal is the theoretical best — no real algorithm can match it.</em>':''}
+    ${currentAlgo==='lru'?'<em>LRU closely approximates Optimal and is widely used in practice.</em>':''}
+    ${currentAlgo==='clock'?'<em>Second Chance is a practical LRU approximation used in modern OS kernels.</em>':''}
+    ${currentAlgo==='lfu'?'<em>LFU can retain stale pages with high historical frequency — consider recency too.</em>':''}
+  `;
+}
+
+// ── Presets ────────────────────────────────────────────
+const PRESETS={
+  standard:{refs:'7 0 1 2 0 3 0 4 2 3 0 3 2',frames:3},
+  belady:{refs:'1 2 3 4 1 2 5 1 2 3 4 5',frames:3},
+  locality:{refs:'1 2 3 1 2 3 1 2 3 4 5 4 5',frames:3},
+  thrashing:{refs:'1 2 3 4 5 1 2 3 4 5',frames:2},
+};
+document.querySelectorAll('[data-preset]').forEach(btn=>{
+  btn.onclick=()=>{ const p=PRESETS[btn.dataset.preset]; document.getElementById('refInput').value=p.refs; document.getElementById('frameInput').value=p.frames; document.getElementById('frameSlider').value=p.frames; document.getElementById('frameVal').textContent=p.frames; };
 });
 
-document.getElementById('resetBtn').addEventListener('click', () => {
-  stopPlay(); simSteps = []; currentStep = 0;
-  document.getElementById('refDisplay').innerHTML = '<span class="text-muted text-sm">Configure and click Simulate</span>';
-  document.getElementById('frameGrid').innerHTML = '<div class="text-muted text-sm">Run simulation to see frame states.</div>';
-  document.getElementById('playbackBar').style.display = 'none';
-  document.getElementById('metricsArea').style.display = 'none';
-  document.getElementById('historyArea').style.display = 'none';
-  document.getElementById('currentRefBadge').style.display = 'none';
-});
+document.getElementById('randomRefBtn').onclick=()=>{
+  const n=10+Math.floor(Math.random()*8);
+  const refs=Array.from({length:n},()=>Math.floor(Math.random()*6));
+  document.getElementById('refInput').value=refs.join(' ');
+};
+document.getElementById('localRefBtn').onclick=()=>{
+  // Locality of reference pattern
+  const refs=[];
+  const areas=[[0,1,2],[3,4,5],[1,2,3]];
+  areas.forEach(a=>{ for(let i=0;i<4;i++) refs.push(a[Math.floor(Math.random()*a.length)]); });
+  document.getElementById('refInput').value=refs.join(' ');
+};
+
+document.getElementById('resetBtn').onclick=()=>{
+  stopPlay(); simSteps=[]; currentStep=0;
+  ['playbackBar','scrubberWrap','metricsArea','historyArea','compArea','summaryArea','beladyArea'].forEach(id=>document.getElementById(id).style.display='none');
+  document.getElementById('refDisplay').innerHTML='<span class="text-muted text-sm">Configure and click Simulate</span>';
+  document.getElementById('framesDisplay').innerHTML='<div class="text-muted text-sm">Run simulation.</div>';
+  document.getElementById('faultCounter').textContent='0';
+  document.getElementById('hitCounter').textContent='0';
+  document.getElementById('hitBadge').style.display='none';
+  document.getElementById('faultBadge').style.display='none';
+  document.getElementById('stepCard').textContent='Run the simulation.';
+  ['fifoQueueWrap','lruOrderWrap','lfuFreqWrap','optLookaheadWrap','clockWrap'].forEach(id=>document.getElementById(id).style.display='none');
+};
 </script>
 </body>
 </html>
