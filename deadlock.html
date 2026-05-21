@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deadlock — Banker's Algorithm — OS Algorithms</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .matrix-section { margin-bottom: var(--space-4); }
+    .matrix-label {
+      font-size: 0.78rem; font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: var(--space-2);
+    }
+    .matrix-table {
+      border-collapse: collapse;
+      font-size: 0.84rem;
+    }
+    .matrix-table th {
+      padding: 5px 10px;
+      background: var(--blue-2);
+      color: var(--blue-5);
+      font-weight: 700;
+      font-size: 0.72rem;
+      letter-spacing: 0.05em;
+      border: 1px solid var(--line);
+      text-align: center;
+    }
+    .matrix-table td {
+      padding: 3px 6px;
+      border: 1px solid var(--line);
+      text-align: center;
+    }
+    .matrix-table input {
+      width: 48px; text-align: center;
+      padding: 4px 4px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      font-size: 0.84rem;
+    }
+    .matrix-table .proc-cell {
+      background: var(--blue-1);
+      font-weight: 700;
+      font-size: 0.78rem;
+      color: var(--blue-5);
+    }
+    [data-theme="dark"] .matrix-table th { background: var(--blue-2); color: var(--blue-3); }
+    [data-theme="dark"] .matrix-table .proc-cell { background: var(--blue-1); color: var(--blue-3); }
+
+    .safety-step {
+      border-radius: var(--radius-md);
+      padding: 10px 14px;
+      margin-bottom: 6px;
+      border-left: 4px solid var(--line);
+      font-size: 0.82rem;
+      line-height: 1.5;
+      background: var(--blue-1);
+    }
+    .safety-step.safe { border-left-color: var(--mem-color); background: #f4fdf8; }
+    .safety-step.unsafe { border-left-color: var(--disk-color); background: #fff7f5; }
+    .safety-step.current { border-left-color: var(--accent); background: var(--blue-2); font-weight: 600; }
+    .safety-step.checking { border-left-color: var(--accent-3); background: #fffbf0; }
+    [data-theme="dark"] .safety-step { background: var(--blue-1); }
+    [data-theme="dark"] .safety-step.safe { background: #0f2a1e; }
+    [data-theme="dark"] .safety-step.unsafe { background: #2a0e00; }
+
+    .safe-seq-display {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+      padding: 14px;
+      background: var(--blue-1);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+    }
+    .seq-block {
+      padding: 6px 14px;
+      border-radius: var(--radius-md);
+      font-weight: 800;
+      font-size: 0.9rem;
+      color: #fff;
+      background: var(--mem-color);
+      box-shadow: 0 2px 6px rgba(34,160,107,0.3);
+    }
+    .seq-arrow { color: var(--muted); font-size: 1.2rem; font-weight: 700; }
+
+    .avail-display {
+      display: flex; gap: 8px;
+    }
+    .avail-cell {
+      min-width: 44px; height: 44px;
+      background: var(--blue-2);
+      border: 2px solid var(--blue-3);
+      border-radius: var(--radius-md);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1rem; font-weight: 800;
+      color: var(--blue-5);
+      transition: all 0.3s;
+    }
+    .avail-cell.updated {
+      background: var(--mem-light);
+      border-color: var(--mem-color);
+      color: #135b49;
+      transform: scale(1.1);
+      box-shadow: 0 0 0 3px rgba(34,160,107,0.2);
+    }
+    .need-matrix-wrap, .alloc-matrix-wrap {
+      overflow-x: auto;
+    }
+    .unsafe-banner {
+      background: linear-gradient(135deg, var(--disk-light), #fde0d4);
+      border: 2px solid var(--disk-color);
+      border-radius: var(--radius-lg);
+      padding: var(--space-4) var(--space-5);
+      text-align: center;
+      color: #8b2500;
+      font-weight: 700;
+    }
+    .safe-banner {
+      background: linear-gradient(135deg, var(--mem-light), #c0ecd4);
+      border: 2px solid var(--mem-color);
+      border-radius: var(--radius-lg);
+      padding: var(--space-4) var(--space-5);
+      text-align: center;
+      color: #135b49;
+      font-weight: 700;
+    }
+    .res-count-controls { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="nav-brand" href="index.html">
+    <div class="nav-brand-mark">OS</div>
+    <div><div class="nav-brand-text">OS Algorithms</div><div class="nav-brand-sub">Indian Servers</div></div>
+  </a>
+  <div class="nav-links">
+    <a class="nav-link" href="index.html"><span class="dot" style="background:#1673c7"></span>Home</a>
+    <a class="nav-link" href="cpu-scheduling.html"><span class="dot" style="background:#1673c7"></span>CPU Scheduling</a>
+    <a class="nav-link" href="page-replacement.html"><span class="dot" style="background:#22a06b"></span>Page Replacement</a>
+    <a class="nav-link" href="disk-scheduling.html"><span class="dot" style="background:#ef6c3e"></span>Disk Scheduling</a>
+    <a class="nav-link active" href="deadlock.html"><span class="dot" style="background:#5865f2"></span>Deadlock</a>
+    <a class="nav-link" href="memory-allocation.html"><span class="dot" style="background:#0f9f9a"></span>Memory Allocation</a>
+  </div>
+  <div class="nav-actions">
+    <button class="theme-toggle" id="themeBtn">🌙</button>
+  </div>
+</nav>
+
+<div class="page-layout-3">
+
+  <!-- Control Panel -->
+  <aside class="control-panel">
+    <div>
+      <div class="card-header" style="margin-bottom:0">
+        <div class="card-icon" style="background:linear-gradient(135deg,#e0e2fd,#b5b9fb)">🔒</div>
+        <div>
+          <div class="card-title">Banker's Algorithm</div>
+          <div class="card-subtitle">Deadlock Avoidance</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="res-count-controls">
+      <div class="form-group" style="flex:1; min-width:100px">
+        <label class="form-label">Processes</label>
+        <select id="nProcs" onchange="rebuild()">
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5" selected>5</option>
+        </select>
+      </div>
+      <div class="form-group" style="flex:1; min-width:100px">
+        <label class="form-label">Resources</label>
+        <select id="nRes" onchange="rebuild()">
+          <option value="2">2 (A,B)</option>
+          <option value="3" selected>3 (A,B,C)</option>
+          <option value="4">4 (A,B,C,D)</option>
+        </select>
+      </div>
+    </div>
+
+    <div>
+      <div class="matrix-label">Available Resources</div>
+      <div id="availableInputs" class="flex gap-2" style="margin-bottom:4px"></div>
+      <div class="form-hint" id="availHint"></div>
+    </div>
+
+    <div>
+      <div class="matrix-label">Allocation Matrix</div>
+      <div class="need-matrix-wrap">
+        <table class="matrix-table" id="allocTable"></table>
+      </div>
+    </div>
+
+    <div>
+      <div class="matrix-label">Max Matrix</div>
+      <div class="alloc-matrix-wrap">
+        <table class="matrix-table" id="maxTable"></table>
+      </div>
+    </div>
+
+    <div class="btn-group">
+      <button class="btn btn-secondary btn-sm" id="loadExampleBtn">Load Example</button>
+      <button class="btn btn-secondary btn-sm" id="randomBtn">⚡ Random</button>
+    </div>
+
+    <div class="divider"></div>
+    <div class="btn-group" style="flex-wrap:nowrap">
+      <button class="btn btn-primary w-full" id="runBtn">▶ Run Safety Alg.</button>
+      <button class="btn btn-secondary" id="resetBtn">↺</button>
+    </div>
+  </aside>
+
+  <!-- Main Panel -->
+  <main class="viz-panel">
+
+    <!-- Need Matrix -->
+    <div class="card" id="needArea" style="display:none">
+      <div class="panel-title">Need Matrix (Max − Allocation)</div>
+      <div style="overflow-x:auto">
+        <table class="matrix-table" id="needTable"></table>
+      </div>
+    </div>
+
+    <!-- Safety Algorithm Steps -->
+    <div class="card" id="safetyArea" style="display:none">
+      <div class="flex items-center justify-between" style="margin-bottom:var(--space-4)">
+        <div class="panel-title" style="margin:0">Safety Algorithm</div>
+        <div id="statusBadge"></div>
+      </div>
+
+      <!-- Available work vector at each step -->
+      <div style="margin-bottom:var(--space-4)">
+        <div class="section-title" style="margin-bottom:8px">Work Vector (Available)</div>
+        <div class="avail-display" id="workDisplay"></div>
+      </div>
+
+      <!-- Playback -->
+      <div class="playback-bar" id="playbackBar" style="display:none; margin-bottom:var(--space-4)">
+        <button class="btn btn-secondary btn-sm btn-icon" id="stepBackBtn">⟨⟨</button>
+        <button class="btn btn-primary btn-sm" id="playBtn" style="min-width:90px">▶ Play</button>
+        <button class="btn btn-secondary btn-sm btn-icon" id="stepFwdBtn">⟩⟩</button>
+        <div class="progress-bar w-full"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+        <div class="step-counter" id="stepCounter">0 / 0</div>
+      </div>
+
+      <!-- Steps log -->
+      <div class="section-title" style="margin-bottom:8px">Step Log</div>
+      <div id="safetySteps" style="max-height:280px; overflow-y:auto"></div>
+    </div>
+
+    <!-- Safe Sequence / Result -->
+    <div id="resultArea" style="display:none">
+      <div id="resultBanner"></div>
+      <div id="safeSeqArea" style="display:none; margin-top:var(--space-4)">
+        <div class="section-title" style="margin-bottom:8px">Safe Execution Sequence</div>
+        <div class="safe-seq-display" id="safeSeqDisplay"></div>
+      </div>
+    </div>
+
+    <!-- Metrics -->
+    <div id="metricsArea" style="display:none">
+      <div class="metrics-grid" id="metricsGrid"></div>
+    </div>
+  </main>
+
+  <!-- Info Panel -->
+  <aside class="info-panel">
+    <div class="section-title">Process States</div>
+    <div id="procStates" style="display:flex; flex-direction:column; gap:6px">
+      <div class="text-muted text-sm">Run the algorithm to see process states.</div>
+    </div>
+
+    <hr>
+
+    <div class="section-title">How It Works</div>
+    <div style="font-size:0.8rem; color:var(--muted); line-height:1.6">
+      <strong style="color:var(--ink)">Banker's Algorithm</strong><br><br>
+      1. Compute <strong>Need = Max − Allocation</strong><br><br>
+      2. Initialize Work = Available, Finish[i] = false<br><br>
+      3. Find process P<sub>i</sub> where:<br>
+      &nbsp;&nbsp;• Finish[i] = false<br>
+      &nbsp;&nbsp;• Need[i] ≤ Work<br><br>
+      4. Work += Allocation[i], Finish[i] = true<br><br>
+      5. Repeat until no such process exists<br><br>
+      If all Finish[i] = true → <strong style="color:var(--mem-color)">Safe State</strong><br>
+      Otherwise → <strong style="color:var(--disk-color)">Unsafe (Deadlock Risk)</strong>
+    </div>
+  </aside>
+</div>
+
+<script>
+// ── Theme ─────────────────────────────────────────────────
+const themeBtn = document.getElementById('themeBtn');
+const root = document.documentElement;
+const saved = localStorage.getItem('os-theme') || 'light';
+root.setAttribute('data-theme', saved);
+themeBtn.textContent = saved === 'dark' ? '☀️' : '🌙';
+themeBtn.addEventListener('click', () => {
+  const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  root.setAttribute('data-theme', next);
+  themeBtn.textContent = next === 'dark' ? '☀️' : '🌙';
+  localStorage.setItem('os-theme', next);
+});
+
+let nProcs = 5, nRes = 3;
+let allocation = [], maxMatrix = [], available = [];
+let safetySteps = [];
+let currentStep = 0;
+let playing = false;
+let playInterval = null;
+
+const RES_LABELS = ['A', 'B', 'C', 'D'];
+const PROC_COLORS = ['#1673c7','#d85f3f','#22a06b','#7c5bb0','#ef9c00'];
+
+function rebuild() {
+  nProcs = parseInt(document.getElementById('nProcs').value);
+  nRes = parseInt(document.getElementById('nRes').value);
+  // Reset with zeros
+  allocation = Array.from({length:nProcs}, () => new Array(nRes).fill(0));
+  maxMatrix = Array.from({length:nProcs}, () => new Array(nRes).fill(0));
+  available = new Array(nRes).fill(0);
+  renderInputs();
+}
+
+function renderInputs() {
+  // Available
+  const availDiv = document.getElementById('availableInputs');
+  availDiv.innerHTML = Array.from({length:nRes}, (_, r) => `
+    <div style="text-align:center">
+      <div style="font-size:0.7rem;font-weight:700;color:var(--muted);margin-bottom:3px">${RES_LABELS[r]}</div>
+      <input type="number" min="0" max="20" value="${available[r]||0}" style="width:50px;text-align:center"
+        onchange="available[${r}]=parseInt(this.value)||0">
+    </div>
+  `).join('');
+  document.getElementById('availHint').textContent = `Resources: ${RES_LABELS.slice(0,nRes).join(', ')}`;
+
+  // Allocation table
+  renderMatrix('allocTable', allocation, 'Allocation');
+  // Max table
+  renderMatrix('maxTable', maxMatrix, 'Max');
+}
+
+function renderMatrix(id, data, label) {
+  const tbl = document.getElementById(id);
+  const headers = ['<th>P</th>', ...Array.from({length:nRes}, (_,r) => `<th>${RES_LABELS[r]}</th>`)].join('');
+  const rows = data.map((row, i) => {
+    const cells = row.map((v, r) => `<td><input type="number" min="0" max="20" value="${v}" onchange="${id==='allocTable'?'allocation':'maxMatrix'}[${i}][${r}]=parseInt(this.value)||0"></td>`).join('');
+    return `<tr><td class="proc-cell">P${i}</td>${cells}</tr>`;
+  }).join('');
+  tbl.innerHTML = `<thead><tr>${headers}</tr></thead><tbody>${rows}</tbody>`;
+}
+
+// ── Banker's Algorithm ────────────────────────────────────
+function runBankersAlgorithm() {
+  // Read current input values
+  const readMatrix = (id, rows, cols) => {
+    const tbl = document.getElementById(id);
+    const inputs = tbl.querySelectorAll('input');
+    const mat = [];
+    for (let i = 0; i < rows; i++) {
+      mat.push([]);
+      for (let j = 0; j < cols; j++) {
+        mat[i].push(parseInt(inputs[i * cols + j].value) || 0);
+      }
+    }
+    return mat;
+  };
+  const readAvail = () => {
+    const inputs = document.getElementById('availableInputs').querySelectorAll('input');
+    return Array.from(inputs).map(i => parseInt(i.value) || 0);
+  };
+
+  const alloc = readMatrix('allocTable', nProcs, nRes);
+  const max = readMatrix('maxTable', nProcs, nRes);
+  const avail = readAvail();
+
+  // Calculate Need
+  const need = alloc.map((row, i) => row.map((v, j) => max[i][j] - v));
+
+  // Safety algorithm
+  const work = [...avail];
+  const finish = new Array(nProcs).fill(false);
+  const safeSeq = [];
+  const steps = [];
+
+  steps.push({
+    type: 'init',
+    msg: `Initialize Work = [${work.join(', ')}], all Finish[] = false`,
+    work: [...work],
+    finish: [...finish],
+    proc: -1
+  });
+
+  let progress = true;
+  while (progress) {
+    progress = false;
+    for (let i = 0; i < nProcs; i++) {
+      if (finish[i]) continue;
+      // Check if Need[i] <= Work
+      const canAllocate = need[i].every((n, r) => n <= work[r]);
+      if (canAllocate) {
+        steps.push({
+          type: 'check',
+          msg: `Checking P${i}: Need=[${need[i].join(',')}] ≤ Work=[${work.join(',')}] ✓ — P${i} can proceed`,
+          work: [...work],
+          finish: [...finish],
+          proc: i
+        });
+        // Simulate execution
+        need[i].forEach((_, r) => { work[r] += alloc[i][r]; });
+        finish[i] = true;
+        safeSeq.push(i);
+        progress = true;
+        steps.push({
+          type: 'execute',
+          msg: `P${i} executes and releases resources. Work = [${work.join(', ')}]`,
+          work: [...work],
+          finish: [...finish],
+          proc: i
+        });
+      } else {
+        steps.push({
+          type: 'fail',
+          msg: `P${i}: Need=[${need[i].join(',')}] > Work=[${work.join(',')}] — cannot proceed yet`,
+          work: [...work],
+          finish: [...finish],
+          proc: i
+        });
+      }
+    }
+  }
+
+  const isSafe = finish.every(Boolean);
+  steps.push({
+    type: isSafe ? 'safe' : 'unsafe',
+    msg: isSafe
+      ? `✓ All processes completed. Safe sequence: P${safeSeq.join(' → P')}`
+      : `✗ Deadlock detected! Processes [${finish.map((f,i) => f?null:i).filter(x=>x!==null).map(i=>'P'+i).join(', ')}] cannot proceed.`,
+    work: [...work],
+    finish: [...finish],
+    proc: -1,
+    safeSeq: isSafe ? safeSeq : null
+  });
+
+  return { steps, need, isSafe, safeSeq, alloc, max, avail };
+}
+
+// ── Render Need Matrix ────────────────────────────────────
+function renderNeedMatrix(need) {
+  const tbl = document.getElementById('needTable');
+  const headers = ['<th>P</th>', ...Array.from({length:nRes}, (_,r) => `<th>${RES_LABELS[r]}</th>`)].join('');
+  const rows = need.map((row, i) => {
+    const cells = row.map(v => {
+      const unsafe = v < 0;
+      return `<td style="${unsafe?'color:var(--disk-color);font-weight:700':''}">
+        ${unsafe ? `<span title="Need > Max!">${v}</span>` : v}
+      </td>`;
+    }).join('');
+    return `<tr><td class="proc-cell">P${i}</td>${cells}</tr>`;
+  }).join('');
+  tbl.innerHTML = `<thead><tr>${headers}</tr></thead><tbody>${rows}</tbody>`;
+}
+
+// ── Step Rendering ────────────────────────────────────────
+function renderSteps(upTo) {
+  const container = document.getElementById('safetySteps');
+  container.innerHTML = safetySteps.slice(0, upTo).map((s, i) => {
+    let cls = '';
+    if (s.type === 'safe' || s.type === 'execute') cls = 'safe';
+    else if (s.type === 'unsafe' || s.type === 'fail') cls = 'unsafe';
+    else if (s.type === 'check') cls = 'checking';
+    if (i === upTo - 1) cls = 'current';
+    return `<div class="safety-step ${cls}">${s.msg}</div>`;
+  }).join('');
+  container.scrollTop = container.scrollHeight;
+
+  // Work vector
+  const step = safetySteps[upTo - 1];
+  if (step) {
+    const workDiv = document.getElementById('workDisplay');
+    workDiv.innerHTML = step.work.map((v, r) =>
+      `<div style="text-align:center">
+        <div style="font-size:0.7rem;font-weight:700;color:var(--muted);margin-bottom:3px">${RES_LABELS[r]}</div>
+        <div class="avail-cell ${safetySteps[upTo-2] && safetySteps[upTo-2].work[r] !== v ? 'updated' : ''}">${v}</div>
+      </div>`
+    ).join('');
+  }
+
+  // Process states
+  if (step) {
+    updateProcStates(step.finish);
+  }
+}
+
+function updateProcStates(finish) {
+  const panel = document.getElementById('procStates');
+  panel.innerHTML = Array.from({length:nProcs}, (_, i) => {
+    const done = finish[i];
+    return `<div style="display:flex; align-items:center; justify-content:space-between; font-size:0.82rem; padding:5px 8px; border-radius:6px; background:var(--blue-1); border:1px solid var(--line)">
+      <span style="display:flex; align-items:center; gap:6px">
+        <span class="state-dot ${done ? 'done' : 'ready'}"></span>
+        <strong style="color:${PROC_COLORS[i]}">P${i}</strong>
+      </span>
+      <span style="color:var(--muted)">${done ? '✓ Completed' : '⏳ Waiting'}</span>
+    </div>`;
+  }).join('');
+}
+
+function updatePlayback() {
+  const n = safetySteps.length;
+  document.getElementById('stepCounter').textContent = `${currentStep} / ${n}`;
+  const pct = n ? (currentStep / n * 100) : 0;
+  document.getElementById('progressFill').style.width = pct + '%';
+  renderSteps(currentStep);
+}
+
+// ── Run ───────────────────────────────────────────────────
+document.getElementById('runBtn').addEventListener('click', () => {
+  stopPlay();
+  const result = runBankersAlgorithm();
+  safetySteps = result.steps;
+  currentStep = safetySteps.length;
+
+  renderNeedMatrix(result.need);
+  document.getElementById('needArea').style.display = '';
+  document.getElementById('safetyArea').style.display = '';
+  document.getElementById('playbackBar').style.display = 'flex';
+  document.getElementById('resultArea').style.display = '';
+  document.getElementById('metricsArea').style.display = '';
+
+  // Result banner
+  const banner = document.getElementById('resultBanner');
+  if (result.isSafe) {
+    banner.innerHTML = `<div class="safe-banner">✓ System is in a SAFE STATE — Deadlock avoidance successful!</div>`;
+    document.getElementById('safeSeqArea').style.display = '';
+    document.getElementById('safeSeqDisplay').innerHTML = result.safeSeq.map((i, idx) =>
+      `${idx > 0 ? '<span class="seq-arrow">→</span>' : ''}<div class="seq-block" style="background:${PROC_COLORS[i]}">P${i}</div>`
+    ).join('');
+  } else {
+    banner.innerHTML = `<div class="unsafe-banner">⚠ System is in an UNSAFE STATE — Deadlock may occur!</div>`;
+    document.getElementById('safeSeqArea').style.display = 'none';
+  }
+
+  // Status badge
+  document.getElementById('statusBadge').innerHTML = result.isSafe
+    ? '<span class="badge badge-green">✓ Safe</span>'
+    : '<span class="badge badge-red">⚠ Unsafe</span>';
+
+  // Metrics
+  document.getElementById('metricsGrid').innerHTML = `
+    <div class="metric-card"><div class="metric-value" style="color:${result.isSafe?'var(--mem-color)':'var(--disk-color)'}">
+      ${result.isSafe ? '✓ Safe' : '✗ Unsafe'}</div><div class="metric-label">System State</div></div>
+    <div class="metric-card"><div class="metric-value">${nProcs}</div><div class="metric-label">Processes</div></div>
+    <div class="metric-card"><div class="metric-value">${nRes}</div><div class="metric-label">Resource Types</div></div>
+    <div class="metric-card"><div class="metric-value">${safetySteps.length}</div><div class="metric-label">Alg. Steps</div></div>
+  `;
+
+  renderSteps(currentStep);
+  updatePlayback();
+});
+
+// ── Playback ──────────────────────────────────────────────
+document.getElementById('stepBackBtn').addEventListener('click', () => {
+  stopPlay(); if (currentStep > 1) { currentStep--; updatePlayback(); }
+});
+document.getElementById('stepFwdBtn').addEventListener('click', () => {
+  stopPlay(); if (currentStep < safetySteps.length) { currentStep++; updatePlayback(); }
+});
+
+function stopPlay() {
+  clearInterval(playInterval); playing = false;
+  document.getElementById('playBtn').textContent = '▶ Play';
+}
+document.getElementById('playBtn').addEventListener('click', () => {
+  if (playing) { stopPlay(); return; }
+  if (currentStep >= safetySteps.length) currentStep = 0;
+  playing = true;
+  document.getElementById('playBtn').textContent = '⏸ Pause';
+  playInterval = setInterval(() => {
+    if (currentStep >= safetySteps.length) { stopPlay(); return; }
+    currentStep++; updatePlayback();
+  }, 800);
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  stopPlay(); safetySteps = []; currentStep = 0;
+  document.getElementById('needArea').style.display = 'none';
+  document.getElementById('safetyArea').style.display = 'none';
+  document.getElementById('resultArea').style.display = 'none';
+  document.getElementById('metricsArea').style.display = 'none';
+  document.getElementById('procStates').innerHTML = '<div class="text-muted text-sm">Run the algorithm to see process states.</div>';
+});
+
+// ── Load Example ──────────────────────────────────────────
+document.getElementById('loadExampleBtn').addEventListener('click', () => {
+  document.getElementById('nProcs').value = '5';
+  document.getElementById('nRes').value = '3';
+  nProcs = 5; nRes = 3;
+  allocation = [[0,1,0],[2,0,0],[3,0,2],[2,1,1],[0,0,2]];
+  maxMatrix =  [[7,5,3],[3,2,2],[9,0,2],[2,2,2],[4,3,3]];
+  available = [3,3,2];
+  renderInputs();
+});
+
+document.getElementById('randomBtn').addEventListener('click', () => {
+  nProcs = parseInt(document.getElementById('nProcs').value);
+  nRes = parseInt(document.getElementById('nRes').value);
+  const total = Array.from({length:nRes}, () => 5 + Math.floor(Math.random() * 5));
+  allocation = Array.from({length:nProcs}, () =>
+    Array.from({length:nRes}, (_, r) => Math.floor(Math.random() * Math.ceil(total[r] / nProcs)))
+  );
+  maxMatrix = allocation.map(row =>
+    row.map((v, r) => v + Math.floor(Math.random() * (total[r] - v + 1)))
+  );
+  const allocSum = Array.from({length:nRes}, (_, r) => allocation.reduce((s,row) => s + row[r], 0));
+  available = allocSum.map((s, r) => Math.max(0, total[r] - s));
+  renderInputs();
+});
+
+// Init
+document.getElementById('nProcs').value = '5';
+document.getElementById('nRes').value = '3';
+rebuild();
+document.getElementById('loadExampleBtn').click();
+</script>
+</body>
+</html>

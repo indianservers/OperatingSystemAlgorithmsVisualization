@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Memory Allocation — OS Algorithms</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .mem-map-wrapper {
+      display: flex;
+      gap: var(--space-5);
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+    .mem-map-column {
+      flex: 1;
+      min-width: 220px;
+    }
+    .mem-map-title {
+      font-size: 0.78rem; font-weight: 700;
+      color: var(--muted); text-transform: uppercase;
+      letter-spacing: 0.06em; margin-bottom: var(--space-3);
+      text-align: center;
+    }
+    .mem-block-row {
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(0,0,0,0.1);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 12px;
+      margin-bottom: 4px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      transition: all 0.35s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .mem-block-row::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0;
+      height: 40%;
+      background: rgba(255,255,255,0.12);
+    }
+    .mem-block-row.free {
+      background: repeating-linear-gradient(45deg, #edf4fb, #edf4fb 5px, #dde8f5 5px, #dde8f5 10px);
+      border-color: var(--line);
+      color: var(--muted);
+    }
+    .mem-block-row.allocated {
+      color: #fff;
+    }
+    .mem-block-row.fit { box-shadow: 0 0 0 2px rgba(255,255,255,0.4), 0 4px 12px rgba(0,0,0,0.2); }
+    .mem-size-bar {
+      height: 6px;
+      background: rgba(255,255,255,0.3);
+      border-radius: 3px;
+      flex: 1;
+      overflow: hidden;
+    }
+    .mem-size-fill { height: 100%; background: rgba(255,255,255,0.6); border-radius: 3px; }
+    .mem-label { min-width: 60px; }
+    .mem-size-text { font-size: 0.72rem; opacity: 0.9; margin-left: auto; white-space: nowrap; }
+    .proc-input-row {
+      display: flex; gap: 6px; align-items: center;
+      background: var(--blue-1); border: 1px solid var(--line);
+      border-radius: var(--radius-sm); padding: 5px 8px;
+      margin-bottom: 5px;
+    }
+    .proc-input-row input { width: 60px; }
+    .hole-input-row {
+      display: flex; gap: 6px; align-items: center;
+      background: var(--blue-1); border: 1px solid var(--line);
+      border-radius: var(--radius-sm); padding: 5px 8px;
+      margin-bottom: 5px;
+    }
+    .hole-input-row input { width: 60px; }
+    .p-label {
+      font-size: 0.72rem; font-weight: 700; color: var(--muted); min-width: 20px;
+    }
+    .fragment-bar {
+      height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; flex: 1;
+    }
+    .fragment-fill { height: 100%; border-radius: 4px; }
+    .algo-compare-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: var(--space-4);
+    }
+    .compare-card {
+      background: var(--blue-1);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: var(--space-3);
+    }
+    .compare-card-title {
+      font-size: 0.78rem; font-weight: 700;
+      color: var(--blue-5); margin-bottom: var(--space-2);
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+
+    .step-box {
+      background: var(--blue-1);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: 8px 12px;
+      margin-bottom: 5px;
+      font-size: 0.8rem;
+      line-height: 1.5;
+      border-left: 3px solid var(--line);
+    }
+    .step-box.success { border-left-color: var(--mem-color); background: #f4fdf8; }
+    .step-box.fail { border-left-color: var(--disk-color); background: #fff7f5; }
+    .step-box.current { border-left-color: var(--accent); background: var(--blue-2); font-weight: 600; }
+    [data-theme="dark"] .step-box.success { background: #0f2a1e; }
+    [data-theme="dark"] .step-box.fail { background: #2a0e00; }
+  </style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="nav-brand" href="index.html">
+    <div class="nav-brand-mark">OS</div>
+    <div><div class="nav-brand-text">OS Algorithms</div><div class="nav-brand-sub">Indian Servers</div></div>
+  </a>
+  <div class="nav-links">
+    <a class="nav-link" href="index.html"><span class="dot" style="background:#1673c7"></span>Home</a>
+    <a class="nav-link" href="cpu-scheduling.html"><span class="dot" style="background:#1673c7"></span>CPU Scheduling</a>
+    <a class="nav-link" href="page-replacement.html"><span class="dot" style="background:#22a06b"></span>Page Replacement</a>
+    <a class="nav-link" href="disk-scheduling.html"><span class="dot" style="background:#ef6c3e"></span>Disk Scheduling</a>
+    <a class="nav-link" href="deadlock.html"><span class="dot" style="background:#5865f2"></span>Deadlock</a>
+    <a class="nav-link active" href="memory-allocation.html"><span class="dot" style="background:#0f9f9a"></span>Memory Allocation</a>
+  </div>
+  <div class="nav-actions">
+    <button class="theme-toggle" id="themeBtn">🌙</button>
+  </div>
+</nav>
+
+<div class="page-layout">
+
+  <!-- Control Panel -->
+  <aside class="control-panel">
+    <div>
+      <div class="card-header" style="margin-bottom:0">
+        <div class="card-icon" style="background:linear-gradient(135deg,#ccf0ef,#88d8d6)">🗃️</div>
+        <div>
+          <div class="card-title">Memory Allocation</div>
+          <div class="card-subtitle">Contiguous Fit Strategies</div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title">Algorithm</div>
+      <div class="algo-grid">
+        <div class="algo-option selected" data-algo="first">First Fit</div>
+        <div class="algo-option" data-algo="best">Best Fit</div>
+        <div class="algo-option" data-algo="worst">Worst Fit</div>
+        <div class="algo-option" data-algo="next">Next Fit</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title" style="margin-bottom:6px">Memory Holes (KB)</div>
+      <div id="holesInput"></div>
+      <div class="btn-group mt-2">
+        <button class="btn btn-secondary btn-sm" id="addHoleBtn">+ Hole</button>
+        <button class="btn btn-secondary btn-sm" id="randomHoleBtn">⚡ Random</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title" style="margin-bottom:6px">Process Requests (KB)</div>
+      <div id="procsInput"></div>
+      <div class="btn-group mt-2">
+        <button class="btn btn-secondary btn-sm" id="addProcBtn">+ Process</button>
+        <button class="btn btn-secondary btn-sm" id="randomProcBtn">⚡ Random</button>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="btn-group" style="flex-wrap:nowrap">
+      <button class="btn btn-primary w-full" id="runBtn">▶ Allocate</button>
+      <button class="btn btn-secondary" id="resetBtn">↺</button>
+    </div>
+    <div style="margin-top:8px">
+      <button class="btn btn-secondary w-full" id="compareBtn">⊕ Compare All</button>
+    </div>
+  </aside>
+
+  <!-- Main Panel -->
+  <main class="viz-panel">
+
+    <!-- Memory Map -->
+    <div class="card" id="mapCard" style="display:none">
+      <div class="flex items-center justify-between" style="margin-bottom:var(--space-4)">
+        <div>
+          <div class="panel-title" style="margin:0">Memory Map</div>
+          <div class="text-muted text-sm" id="algoLabel">First Fit</div>
+        </div>
+        <div id="mapBadges" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      </div>
+      <div class="mem-map-wrapper" id="memMapWrapper"></div>
+    </div>
+
+    <!-- Playback -->
+    <div class="playback-bar" id="playbackBar" style="display:none">
+      <button class="btn btn-secondary btn-sm btn-icon" id="stepBackBtn">⟨⟨</button>
+      <button class="btn btn-primary btn-sm" id="playBtn" style="min-width:90px">▶ Play</button>
+      <button class="btn btn-secondary btn-sm btn-icon" id="stepFwdBtn">⟩⟩</button>
+      <div class="progress-bar w-full"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+      <div class="step-counter" id="stepCounter">0 / 0</div>
+      <div class="playback-speed">
+        <span class="text-xs text-muted">Speed:</span>
+        <button class="speed-btn" data-spd="2">0.5×</button>
+        <button class="speed-btn active" data-spd="1">1×</button>
+        <button class="speed-btn" data-spd="0.5">2×</button>
+      </div>
+    </div>
+
+    <!-- Metrics -->
+    <div id="metricsArea" style="display:none">
+      <div class="metrics-grid" id="metricsGrid"></div>
+    </div>
+
+    <!-- Step log -->
+    <div id="stepLogArea" style="display:none">
+      <div class="section-title" style="margin-bottom:8px">Allocation Log</div>
+      <div id="allocLog" style="max-height:200px; overflow-y:auto; display:flex; flex-direction:column; gap:4px"></div>
+    </div>
+
+    <!-- Allocation Table -->
+    <div id="tableArea" style="display:none">
+      <div class="section-title" style="margin-bottom:8px">Allocation Table</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Process</th><th>Size (KB)</th><th>Allocated Block</th><th>Block Size</th><th>Internal Frag.</th></tr></thead>
+          <tbody id="allocTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Compare -->
+    <div id="compareArea" style="display:none">
+      <div class="section-title" style="margin-bottom:var(--space-3)">Algorithm Comparison</div>
+      <div class="algo-compare-grid" id="compareGrid"></div>
+    </div>
+  </main>
+</div>
+
+<script>
+// ── Theme ─────────────────────────────────────────────────
+const themeBtn = document.getElementById('themeBtn');
+const root = document.documentElement;
+const saved = localStorage.getItem('os-theme') || 'light';
+root.setAttribute('data-theme', saved);
+themeBtn.textContent = saved === 'dark' ? '☀️' : '🌙';
+themeBtn.addEventListener('click', () => {
+  const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  root.setAttribute('data-theme', next);
+  themeBtn.textContent = next === 'dark' ? '☀️' : '🌙';
+  localStorage.setItem('os-theme', next);
+});
+
+const ALGO_NAMES = { first: 'First Fit', best: 'Best Fit', worst: 'Worst Fit', next: 'Next Fit' };
+const PROC_COLORS = ['#1673c7','#d85f3f','#22a06b','#7c5bb0','#ef9c00','#0f9f9a','#db2777','#65a30d'];
+
+let currentAlgo = 'first';
+let holes = [100, 500, 200, 300, 600];
+let procs = [212, 417, 112, 426];
+let allocSteps = [];
+let currentStep = 0;
+let playing = false;
+let playInterval = null;
+let speedFactor = 1;
+
+// ── Input Rendering ───────────────────────────────────────
+function renderHolesInput() {
+  document.getElementById('holesInput').innerHTML = holes.map((h, i) => `
+    <div class="hole-input-row">
+      <span class="p-label">H${i+1}</span>
+      <input type="number" value="${h}" min="1" max="2000" onchange="holes[${i}]=parseInt(this.value)||0">
+      <span class="text-muted text-xs">KB</span>
+      <button class="btn btn-ghost btn-icon btn-sm" onclick="removeHole(${i})">✕</button>
+    </div>
+  `).join('');
+}
+function renderProcsInput() {
+  document.getElementById('procsInput').innerHTML = procs.map((p, i) => `
+    <div class="proc-input-row">
+      <span class="p-label" style="color:${PROC_COLORS[i%8]};font-weight:800">P${i+1}</span>
+      <input type="number" value="${p}" min="1" max="2000" onchange="procs[${i}]=parseInt(this.value)||0">
+      <span class="text-muted text-xs">KB</span>
+      <button class="btn btn-ghost btn-icon btn-sm" onclick="removeProc(${i})">✕</button>
+    </div>
+  `).join('');
+}
+
+function removeHole(i) { if (holes.length > 1) { holes.splice(i, 1); renderHolesInput(); } }
+function removeProc(i) { if (procs.length > 1) { procs.splice(i, 1); renderProcsInput(); } }
+
+document.getElementById('addHoleBtn').addEventListener('click', () => { if (holes.length < 10) { holes.push(200); renderHolesInput(); } });
+document.getElementById('addProcBtn').addEventListener('click', () => { if (procs.length < 8) { procs.push(100); renderProcsInput(); } });
+document.getElementById('randomHoleBtn').addEventListener('click', () => {
+  holes = Array.from({length: 5 + Math.floor(Math.random()*4)}, () => 50 + Math.floor(Math.random()*550));
+  renderHolesInput();
+});
+document.getElementById('randomProcBtn').addEventListener('click', () => {
+  procs = Array.from({length: 4 + Math.floor(Math.random()*3)}, () => 30 + Math.floor(Math.random()*400));
+  renderProcsInput();
+});
+
+document.querySelectorAll('.algo-option').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.algo-option').forEach(x => x.classList.remove('selected'));
+    el.classList.add('selected');
+    currentAlgo = el.dataset.algo;
+    document.getElementById('algoLabel').textContent = ALGO_NAMES[currentAlgo];
+  });
+});
+
+// ── Algorithms ────────────────────────────────────────────
+function allocate(holesCopy, procsCopy, algo) {
+  const blocks = holesCopy.map((size, i) => ({ id: i, origSize: size, size, allocated: null }));
+  const steps = [];
+  let nextPtr = 0;
+
+  for (let pi = 0; pi < procsCopy.length; pi++) {
+    const pSize = procsCopy[pi];
+    let chosen = -1;
+
+    if (algo === 'first') {
+      chosen = blocks.findIndex(b => b.allocated === null && b.size >= pSize);
+    } else if (algo === 'best') {
+      let bestFit = Infinity;
+      blocks.forEach((b, i) => {
+        if (b.allocated === null && b.size >= pSize && b.size - pSize < bestFit) {
+          bestFit = b.size - pSize; chosen = i;
+        }
+      });
+    } else if (algo === 'worst') {
+      let worstFit = -1;
+      blocks.forEach((b, i) => {
+        if (b.allocated === null && b.size >= pSize && b.size > worstFit) {
+          worstFit = b.size; chosen = i;
+        }
+      });
+    } else if (algo === 'next') {
+      const start = nextPtr;
+      for (let k = 0; k < blocks.length; k++) {
+        const idx = (start + k) % blocks.length;
+        if (blocks[idx].allocated === null && blocks[idx].size >= pSize) {
+          chosen = idx; break;
+        }
+      }
+    }
+
+    if (chosen !== -1) {
+      const block = blocks[chosen];
+      const fragBefore = block.size;
+      block.allocated = pi;
+      block.size -= pSize;
+      if (algo === 'next') nextPtr = (chosen + 1) % blocks.length;
+      steps.push({
+        proc: pi, pSize, block: chosen, success: true,
+        frag: fragBefore - pSize,
+        msg: `P${pi+1} (${pSize}KB) → Block H${chosen+1} (${fragBefore}KB). Internal fragmentation: ${fragBefore - pSize}KB`,
+        blocks: blocks.map(b => ({...b}))
+      });
+    } else {
+      steps.push({
+        proc: pi, pSize, block: -1, success: false,
+        msg: `P${pi+1} (${pSize}KB) → No suitable block found!`,
+        blocks: blocks.map(b => ({...b}))
+      });
+    }
+  }
+  return { steps, blocks };
+}
+
+// ── Render Memory Map ─────────────────────────────────────
+function renderMemMap(step) {
+  const wrapper = document.getElementById('memMapWrapper');
+  if (!step) { wrapper.innerHTML = ''; return; }
+
+  const totalMem = holes.reduce((s, h) => s + h, 0);
+  const html = `
+    <div class="mem-map-column">
+      <div class="mem-map-title">Memory Blocks</div>
+      ${step.blocks.map((b, i) => {
+        const isAllocated = b.allocated !== null;
+        const origSize = holes[i];
+        const usedSize = origSize - b.size;
+        const fillPct = origSize > 0 ? (usedSize / origSize * 100) : 0;
+        const color = isAllocated ? PROC_COLORS[b.allocated % 8] : null;
+        const height = Math.max(36, Math.round(origSize / totalMem * 400));
+
+        if (!isAllocated) {
+          return `<div class="mem-block-row free" style="min-height:${height}px">
+            <span class="mem-label">H${i+1} (Free)</span>
+            <div class="mem-size-bar"><div class="mem-size-fill" style="width:0%"></div></div>
+            <span class="mem-size-text">${b.size}KB</span>
+          </div>`;
+        } else {
+          return `<div class="mem-block-row allocated" style="background:${color}; min-height:${height}px">
+            <span class="mem-label">P${b.allocated+1} in H${i+1}</span>
+            <div class="mem-size-bar"><div class="mem-size-fill" style="width:${fillPct}%"></div></div>
+            <span class="mem-size-text">${usedSize}KB + ${b.size}KB free</span>
+          </div>`;
+        }
+      }).join('')}
+    </div>
+  `;
+  wrapper.innerHTML = html;
+}
+
+function renderAllocLog(upTo) {
+  const log = document.getElementById('allocLog');
+  log.innerHTML = allocSteps.slice(0, upTo).map((s, i) => {
+    const cls = s.success ? 'success' : 'fail';
+    const isCur = i === upTo - 1 ? 'current' : '';
+    return `<div class="step-box ${cls} ${isCur}">${s.msg}</div>`;
+  }).join('');
+  log.scrollTop = log.scrollHeight;
+}
+
+function renderAllocTable(upTo) {
+  const body = document.getElementById('allocTableBody');
+  body.innerHTML = allocSteps.slice(0, upTo).map(s => {
+    if (!s.success) {
+      return `<tr><td><span style="color:${PROC_COLORS[s.proc%8]};font-weight:700">P${s.proc+1}</span></td>
+        <td>${s.pSize}</td><td colspan="3" style="color:var(--disk-color);font-weight:600">Not allocated</td></tr>`;
+    }
+    return `<tr><td><span style="color:${PROC_COLORS[s.proc%8]};font-weight:700">P${s.proc+1}</span></td>
+      <td>${s.pSize}</td>
+      <td>H${s.block+1}</td>
+      <td>${holes[s.block]}</td>
+      <td>${s.frag}</td></tr>`;
+  }).join('');
+}
+
+function updateDisplay(stepIdx) {
+  const step = stepIdx > 0 ? allocSteps[stepIdx - 1] : null;
+  renderMemMap(step);
+  renderAllocLog(stepIdx);
+  renderAllocTable(stepIdx);
+  const pct = allocSteps.length ? (stepIdx / allocSteps.length * 100) : 0;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('stepCounter').textContent = `${stepIdx} / ${allocSteps.length}`;
+}
+
+// ── Compare ───────────────────────────────────────────────
+function compareAll() {
+  const algos = ['first', 'best', 'worst', 'next'];
+  document.getElementById('compareArea').style.display = '';
+  const grid = document.getElementById('compareGrid');
+  grid.innerHTML = algos.map(algo => {
+    const result = allocate([...holes], [...procs], algo);
+    const allocated = result.steps.filter(s => s.success).length;
+    const failed = result.steps.filter(s => !s.success).length;
+    const frag = result.steps.filter(s => s.success).reduce((s, x) => s + x.frag, 0);
+    return `<div class="compare-card">
+      <div class="compare-card-title">${ALGO_NAMES[algo]}</div>
+      <div style="font-size:0.82rem; display:flex; flex-direction:column; gap:5px">
+        <div class="flex justify-between"><span class="text-muted">Allocated</span><span style="color:var(--mem-color);font-weight:700">${allocated}/${procs.length}</span></div>
+        <div class="flex justify-between"><span class="text-muted">Failed</span><span style="color:${failed>0?'var(--disk-color)':'var(--muted)'};font-weight:700">${failed}</span></div>
+        <div class="flex justify-between"><span class="text-muted">Int. Frag.</span><span style="font-weight:700">${frag}KB</span></div>
+        <div class="fragment-bar mt-1"><div class="fragment-fill" style="width:${Math.min(100, frag/10)}%; background:var(--accent-3)"></div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Run ───────────────────────────────────────────────────
+document.getElementById('runBtn').addEventListener('click', () => {
+  stopPlay();
+  const result = allocate([...holes], [...procs], currentAlgo);
+  allocSteps = result.steps;
+  currentStep = allocSteps.length;
+
+  document.getElementById('mapCard').style.display = '';
+  document.getElementById('algoLabel').textContent = ALGO_NAMES[currentAlgo];
+  document.getElementById('playbackBar').style.display = 'flex';
+  document.getElementById('metricsArea').style.display = '';
+  document.getElementById('stepLogArea').style.display = '';
+  document.getElementById('tableArea').style.display = '';
+
+  const allocated = allocSteps.filter(s => s.success).length;
+  const failed = allocSteps.filter(s => !s.success).length;
+  const totalFrag = allocSteps.filter(s => s.success).reduce((s, x) => s + x.frag, 0);
+  const totalMem = holes.reduce((s, h) => s + h, 0);
+  const usedMem = procs.filter((_, i) => allocSteps.find(s => s.proc === i && s.success)).reduce((s, p) => s + p, 0);
+
+  document.getElementById('metricsGrid').innerHTML = `
+    <div class="metric-card"><div class="metric-value" style="color:var(--mem-color)">${allocated}/${procs.length}</div><div class="metric-label">Allocated</div></div>
+    <div class="metric-card"><div class="metric-value" style="color:${failed>0?'var(--disk-color)':'var(--muted)'}">
+      ${failed}</div><div class="metric-label">Unallocated</div></div>
+    <div class="metric-card"><div class="metric-value">${totalFrag}KB</div><div class="metric-label">Int. Fragmentation</div></div>
+    <div class="metric-card"><div class="metric-value">${((usedMem/totalMem)*100).toFixed(1)}%</div><div class="metric-label">Memory Util.</div></div>
+  `;
+
+  const badges = document.getElementById('mapBadges');
+  badges.innerHTML = `
+    <span class="badge badge-green">${allocated} allocated</span>
+    ${failed > 0 ? `<span class="badge badge-red">${failed} failed</span>` : ''}
+  `;
+
+  updateDisplay(currentStep);
+});
+
+document.getElementById('compareBtn').addEventListener('click', compareAll);
+
+// ── Playback ──────────────────────────────────────────────
+document.getElementById('stepBackBtn').addEventListener('click', () => {
+  stopPlay(); if (currentStep > 0) { currentStep--; updateDisplay(currentStep); }
+});
+document.getElementById('stepFwdBtn').addEventListener('click', () => {
+  stopPlay(); if (currentStep < allocSteps.length) { currentStep++; updateDisplay(currentStep); }
+});
+
+function stopPlay() {
+  clearInterval(playInterval); playing = false;
+  document.getElementById('playBtn').textContent = '▶ Play';
+}
+document.getElementById('playBtn').addEventListener('click', () => {
+  if (playing) { stopPlay(); return; }
+  if (currentStep >= allocSteps.length) currentStep = 0;
+  playing = true;
+  document.getElementById('playBtn').textContent = '⏸ Pause';
+  playInterval = setInterval(() => {
+    if (currentStep >= allocSteps.length) { stopPlay(); return; }
+    currentStep++; updateDisplay(currentStep);
+  }, 700 * speedFactor);
+});
+
+document.querySelectorAll('.speed-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.speed-btn').forEach(x => x.classList.remove('active'));
+    btn.classList.add('active');
+    speedFactor = parseFloat(btn.dataset.spd);
+    if (playing) { stopPlay(); document.getElementById('playBtn').click(); }
+  });
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  stopPlay(); allocSteps = []; currentStep = 0;
+  document.getElementById('mapCard').style.display = 'none';
+  document.getElementById('playbackBar').style.display = 'none';
+  document.getElementById('metricsArea').style.display = 'none';
+  document.getElementById('stepLogArea').style.display = 'none';
+  document.getElementById('tableArea').style.display = 'none';
+  document.getElementById('compareArea').style.display = 'none';
+});
+
+renderHolesInput();
+renderProcsInput();
+</script>
+</body>
+</html>
