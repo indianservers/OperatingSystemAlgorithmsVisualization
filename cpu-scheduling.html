@@ -409,6 +409,10 @@ input[type=range].scrubber {
       <div class="algo-tab" data-algo="rr">Round Robin</div>
       <div class="algo-tab" data-algo="priority_np">Priority NP</div>
       <div class="algo-tab" data-algo="priority_p">Priority P</div>
+      <div class="algo-tab" data-algo="hrrn">HRRN</div>
+      <div class="algo-tab" data-algo="mlfq">MLFQ</div>
+      <div class="algo-tab" data-algo="edf">EDF</div>
+      <div class="algo-tab" data-algo="rms">RMS</div>
     </div>
   </div>
 
@@ -679,7 +683,11 @@ const ALGO_NAMES = {
   srtf:'Shortest Remaining Time First — Preemptive (SRTF)',
   rr:'Round Robin (RR)',
   priority_np:'Priority Scheduling — Non-Preemptive',
-  priority_p:'Priority Scheduling — Preemptive'
+  priority_p:'Priority Scheduling — Preemptive',
+  hrrn:'Highest Response Ratio Next (HRRN)',
+  mlfq:'Multilevel Feedback Queue (MLFQ)',
+  edf:'Earliest Deadline First (EDF)',
+  rms:'Rate Monotonic Scheduling (RMS)'
 };
 const ALGO_DESC = {
   fcfs:'Processes execute in arrival order. Simple and fair by arrival, but can cause the <em>convoy effect</em> where short processes wait behind long ones. <strong>Non-preemptive.</strong>',
@@ -687,11 +695,16 @@ const ALGO_DESC = {
   srtf:'Preemptive SJF. At every tick, the process with the <strong>shortest remaining time</strong> runs. New arrivals can preempt. Optimal average waiting time but high context switches. <strong>Preemptive.</strong>',
   rr:'Each process gets a fixed <strong>time quantum</strong>. After quantum expires, it re-enters the queue. Fair, good response time, suitable for interactive systems. <strong>Preemptive.</strong>',
   priority_np:'At each decision point, selects the arrived process with <strong>highest priority</strong> (lowest number). Risk of <em>starvation</em>. <strong>Non-preemptive.</strong>',
-  priority_p:'At every tick, the highest-priority arrived process runs, preempting lower-priority ones. Optional aging prevents starvation. <strong>Preemptive.</strong>'
+  priority_p:'At every tick, the highest-priority arrived process runs, preempting lower-priority ones. Optional aging prevents starvation. <strong>Preemptive.</strong>',
+  hrrn:'Selects the ready process with the highest response ratio: <strong>(waiting + burst) / burst</strong>. Short jobs benefit, but long-waiting jobs eventually rise. <strong>Non-preemptive.</strong>',
+  mlfq:'Uses multiple queues with different quanta. New jobs start high; CPU-heavy jobs move down, while waiting jobs can age upward. <strong>Preemptive.</strong>',
+  edf:'Real-time scheduling: runs the ready job with the earliest deadline. Here the Priority field acts as a relative deadline. <strong>Preemptive.</strong>',
+  rms:'Real-time fixed-priority scheduling: shorter periods get higher priority. Here the Priority field acts as the task period. <strong>Preemptive.</strong>'
 };
 const RQ_NOTES = {
   fcfs:'(arrival order)', sjf:'(sorted: shortest burst first)', srtf:'(sorted: shortest remaining first)',
-  rr:'(queue order + quantum)', priority_np:'(sorted: highest priority first)', priority_p:'(sorted: highest priority first)'
+  rr:'(queue order + quantum)', priority_np:'(sorted: highest priority first)', priority_p:'(sorted: highest priority first)',
+  hrrn:'(sorted: highest response ratio)', mlfq:'(top queue first, aging upward)', edf:'(earliest deadline first)', rms:'(shortest period first)'
 };
 
 // ══════════════════════════════════════════════════════════
@@ -744,7 +757,7 @@ function init() {
 // ══════════════════════════════════════════════════════════
 function renderTable(states) {
   const body = document.getElementById('procBody');
-  const showPri = currentAlgo==='priority_np'||currentAlgo==='priority_p';
+  const showPri = currentAlgo==='priority_np'||currentAlgo==='priority_p'||currentAlgo==='edf'||currentAlgo==='rms';
   document.getElementById('priHead').classList.toggle('hidden',!showPri);
   body.innerHTML = processes.map((p,i) => {
     const st = states ? states[p.pid] : 'not_arrived';
@@ -809,10 +822,10 @@ document.querySelectorAll('.algo-tab').forEach(tab => {
 
 function updateAlgoUI() {
   document.getElementById('algoDesc').innerHTML = ALGO_DESC[currentAlgo];
-  document.getElementById('quantumOpt').classList.toggle('hidden', currentAlgo!=='rr');
-  document.getElementById('agingOpt').classList.toggle('hidden', !currentAlgo.startsWith('priority'));
+  document.getElementById('quantumOpt').classList.toggle('hidden', !(currentAlgo==='rr'||currentAlgo==='mlfq'));
+  document.getElementById('agingOpt').classList.toggle('hidden', !(currentAlgo.startsWith('priority')||currentAlgo==='mlfq'));
   document.getElementById('rqAlgoNote').textContent = RQ_NOTES[currentAlgo];
-  document.getElementById('priHead').classList.toggle('hidden', !currentAlgo.startsWith('priority'));
+  document.getElementById('priHead').classList.toggle('hidden', !(currentAlgo.startsWith('priority')||currentAlgo==='edf'||currentAlgo==='rms'));
   document.getElementById('ganttTitle').textContent = `Gantt Chart — ${ALGO_NAMES[currentAlgo]}`;
 }
 
@@ -1037,6 +1050,67 @@ function simulate(inputProcs, algo, opts={}) {
         runningPid=null; reason='CPU idle'; reasonType='idle';
       }
     }
+    else if(algo==='hrrn'){
+      if(runningPid===null){
+        const ready=getReady(procs,completed,t);
+        ready.sort((a,b)=>{
+          const ra=((t-a.arrival)+a.burst)/a.burst;
+          const rb=((t-b.arrival)+b.burst)/b.burst;
+          return rb-ra || a.arrival-b.arrival || a.pid-b.pid;
+        });
+        if(ready.length>0){
+          const sel=ready[0];
+          const ratio=((t-sel.arrival)+sel.burst)/sel.burst;
+          runningPid=sel.pid;
+          if(sel.startTime===-1) sel.startTime=t;
+          reason=`P${sel.pid} selected: highest response ratio ${ratio.toFixed(2)} = (wait + burst) / burst`;
+          reasonType='select'; isNewDecision=true; contextSwitches++; ctxSwitch=true;
+        } else { reason='CPU idle'; reasonType='idle'; }
+      }
+    }
+    else if(algo==='mlfq'){
+      const ready=getReady(procs,completed,t);
+      if(runningPid!==null) ready.push(byPid[runningPid]);
+      ready.sort((a,b)=>{
+        const qa=a.rem>a.burst/2?0:1;
+        const qb=b.rem>b.burst/2?0:1;
+        return qa-qb || a.arrival-b.arrival || a.pid-b.pid;
+      });
+      const best=ready.length?ready[0]:null;
+      if(best && best.pid!==runningPid){
+        const oldRun=runningPid;
+        runningPid=best.pid;
+        if(best.startTime===-1) best.startTime=t;
+        reason=oldRun?`P${runningPid} runs from the highest non-empty feedback queue, preempting P${oldRun}.`:`P${runningPid} starts in the top feedback queue.`;
+        reasonType=oldRun?'preempt':'select'; isNewDecision=true; contextSwitches++; ctxSwitch=true;
+      } else if(!best){ runningPid=null; reason='CPU idle'; reasonType='idle'; }
+    }
+    else if(algo==='edf'){
+      const ready=getReady(procs,completed,t);
+      if(runningPid!==null) ready.push(byPid[runningPid]);
+      ready.sort((a,b)=>(a.arrival+a.priority)-(b.arrival+b.priority)||a.pid-b.pid);
+      const best=ready.length?ready[0]:null;
+      if(best && best.pid!==runningPid){
+        const oldRun=runningPid;
+        runningPid=best.pid;
+        if(best.startTime===-1) best.startTime=t;
+        reason=`P${runningPid} has earliest deadline at t=${best.arrival+best.priority}.`;
+        reasonType=oldRun?'preempt':'select'; isNewDecision=true; contextSwitches++; ctxSwitch=true;
+      } else if(!best){ runningPid=null; reason='CPU idle'; reasonType='idle'; }
+    }
+    else if(algo==='rms'){
+      const ready=getReady(procs,completed,t);
+      if(runningPid!==null) ready.push(byPid[runningPid]);
+      ready.sort((a,b)=>a.priority-b.priority||a.arrival-b.arrival||a.pid-b.pid);
+      const best=ready.length?ready[0]:null;
+      if(best && best.pid!==runningPid){
+        const oldRun=runningPid;
+        runningPid=best.pid;
+        if(best.startTime===-1) best.startTime=t;
+        reason=`P${runningPid} has the shortest period (${best.priority}), so RMS gives it fixed priority.`;
+        reasonType=oldRun?'preempt':'select'; isNewDecision=true; contextSwitches++; ctxSwitch=true;
+      } else if(!best){ runningPid=null; reason='CPU idle'; reasonType='idle'; }
+    }
 
     // Compute wait times + starvation
     const waitTimes={}, starvWarnings=[];
@@ -1116,6 +1190,10 @@ function getReadyDisplayQueue(procs, completed, runningPid, t, algo, rrQueue, ef
   if(algo==='sjf') ready.sort((a,b)=>a.burst-b.burst||a.arrival-b.arrival||a.pid-b.pid);
   else if(algo==='srtf') ready.sort((a,b)=>a.rem-b.rem||a.arrival-b.arrival||a.pid-b.pid);
   else if(algo==='priority_np'||algo==='priority_p') ready.sort((a,b)=>effectivePri[a.pid]-effectivePri[b.pid]||a.arrival-b.arrival||a.pid-b.pid);
+  else if(algo==='hrrn') ready.sort((a,b)=>(((t-b.arrival)+b.burst)/b.burst)-(((t-a.arrival)+a.burst)/a.burst)||a.pid-b.pid);
+  else if(algo==='mlfq') ready.sort((a,b)=>(a.rem>a.burst/2?0:1)-(b.rem>b.burst/2?0:1)||a.arrival-b.arrival||a.pid-b.pid);
+  else if(algo==='edf') ready.sort((a,b)=>(a.arrival+a.priority)-(b.arrival+b.priority)||a.pid-b.pid);
+  else if(algo==='rms') ready.sort((a,b)=>a.priority-b.priority||a.arrival-b.arrival||a.pid-b.pid);
   else ready.sort((a,b)=>a.arrival-b.arrival||a.pid-b.pid);
   return ready.map(p=>({
     pid:p.pid,
@@ -1123,6 +1201,10 @@ function getReadyDisplayQueue(procs, completed, runningPid, t, algo, rrQueue, ef
     info: algo==='sjf'?`burst:${p.burst}` :
           algo==='srtf'?`rem:${p.rem}` :
           algo.startsWith('priority')?`pri:${effectivePri[p.pid]}${effectivePri[p.pid]!==p.priority?'(aged)':''}` :
+          algo==='hrrn'?`RR:${(((t-p.arrival)+p.burst)/p.burst).toFixed(2)}` :
+          algo==='mlfq'?`Q${p.rem>p.burst/2?0:1}` :
+          algo==='edf'?`deadline:${p.arrival+p.priority}` :
+          algo==='rms'?`period:${p.priority}` :
           `arr:${p.arrival}`
   }));
 }
@@ -1677,6 +1759,10 @@ function runComparison() {
     {id:'rr',label:`RR (q=${opts.quantum})`},
     {id:'priority_np',label:'Priority NP'},
     {id:'priority_p',label:'Priority P'},
+    {id:'hrrn',label:'HRRN'},
+    {id:'mlfq',label:'MLFQ'},
+    {id:'edf',label:'EDF'},
+    {id:'rms',label:'RMS'},
   ];
   const results=configs.map(c=>{
     const tl=simulate(processes,c.id,opts);

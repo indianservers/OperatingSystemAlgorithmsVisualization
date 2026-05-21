@@ -216,6 +216,11 @@
     <div class="algo-tab" data-algo="cscan">C-SCAN</div>
     <div class="algo-tab" data-algo="look">LOOK</div>
     <div class="algo-tab" data-algo="clook">C-LOOK</div>
+    <div class="algo-tab" data-algo="nstep">N-Step SCAN</div>
+    <div class="algo-tab" data-algo="fscan">FSCAN</div>
+    <div class="algo-tab" data-algo="deadline">Deadline</div>
+    <div class="algo-tab" data-algo="anticipatory">Anticipatory</div>
+    <div class="algo-tab" data-algo="cfq">CFQ</div>
   </div>
   <div class="toolbar-sep"></div>
   <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
@@ -488,6 +493,41 @@ const ALGO_INFO = {
     best:'Best combination of efficiency and uniform wait times',
     worst:'Slightly more complex than LOOK',
     fairness:5, efficiency:5, starvation:1, complexity:3
+  },
+  nstep:{
+    name:'N-Step SCAN',
+    desc:'Splits the pending queue into fixed-size batches. Each batch is served with SCAN, while new arrivals wait for a later batch. This teaches how batching limits arm stickiness.',
+    best:'Stable service under heavy load; reduces starvation caused by a constantly growing queue',
+    worst:'Batch boundaries can delay newly arrived nearby requests',
+    fairness:4, efficiency:3, starvation:1, complexity:3
+  },
+  fscan:{
+    name:'FSCAN',
+    desc:'Uses two queues: one queue is actively served with SCAN while new requests collect in a second queue. When the active queue empties, the queues swap.',
+    best:'Prevents the active scan from being disturbed by new incoming requests',
+    worst:'New requests may wait until the current queue is fully drained',
+    fairness:4, efficiency:3, starvation:1, complexity:3
+  },
+  deadline:{
+    name:'Deadline Scheduling',
+    desc:'Mostly chooses efficient nearby requests, but periodically forces the oldest waiting request to run before its deadline expires.',
+    best:'Balancing throughput with bounded waiting time',
+    worst:'Can sacrifice seek efficiency to honor deadlines',
+    fairness:5, efficiency:3, starvation:1, complexity:4
+  },
+  anticipatory:{
+    name:'Anticipatory Scheduling',
+    desc:'After serving a request, the scheduler briefly waits for another nearby request before moving far away. This reduces costly reversals for sequential workloads.',
+    best:'Sequential reads and workloads with locality',
+    worst:'The wait can hurt random workloads',
+    fairness:3, efficiency:4, starvation:2, complexity:4
+  },
+  cfq:{
+    name:'Completely Fair Queuing (CFQ)',
+    desc:'Groups requests into fairness classes and gives each class a turn. The visualization alternates request groups to show time-slice style disk fairness.',
+    best:'Multi-process systems where no request stream should dominate',
+    worst:'Lower raw throughput than pure shortest-seek choices',
+    fairness:5, efficiency:3, starvation:1, complexity:5
   }
 };
 
@@ -546,7 +586,7 @@ function updateAlgoInfo(){
   `;
   // Show starvation warning for SSTF
   document.getElementById('starvWarnBadge').style.display=currentAlgo==='sstf'?'':'none';
-  const scanAlgos=['scan','cscan','look','clook'];
+  const scanAlgos=['scan','cscan','look','clook','nstep','fscan'];
   document.getElementById('dirRow').style.display=scanAlgos.includes(currentAlgo)?'':'none';
 }
 updateAlgoInfo();
@@ -619,6 +659,65 @@ function computeCLOOK(head,reqs,dir){
   return seq;
 }
 
+function appendSegment(seq, segment){
+  segment.slice(1).forEach(v=>seq.push(v));
+}
+
+function computeNStepSCAN(head,reqs,dir,max,batchSize=4){
+  const seq=[head]; let cur=head; let d=dir;
+  for(let i=0;i<reqs.length;i+=batchSize){
+    const part=computeSCAN(cur,reqs.slice(i,i+batchSize),d,max);
+    appendSegment(seq,part);
+    cur=seq[seq.length-1];
+    d=d==='right'?'left':'right';
+  }
+  return seq;
+}
+
+function computeFSCAN(head,reqs,dir,max){
+  const split=Math.ceil(reqs.length/2);
+  const seq=computeSCAN(head,reqs.slice(0,split),dir,max);
+  appendSegment(seq,computeSCAN(seq[seq.length-1],reqs.slice(split),dir==='right'?'left':'right',max));
+  return seq;
+}
+
+function computeDeadline(head,reqs){
+  const rem=reqs.map((cyl,i)=>({cyl,age:i}));
+  const seq=[head]; let cur=head; let tick=0;
+  while(rem.length){
+    const pickIndex = tick>0 && tick%3===0
+      ? rem.reduce((oldest,r,i)=>r.age<rem[oldest].age?i:oldest,0)
+      : rem.reduce((best,r,i)=>Math.abs(r.cyl-cur)<Math.abs(rem[best].cyl-cur)?i:best,0);
+    const [pick]=rem.splice(pickIndex,1);
+    cur=pick.cyl; seq.push(cur); tick++;
+  }
+  return seq;
+}
+
+function computeAnticipatory(head,reqs){
+  const rem=[...reqs]; const seq=[head]; let cur=head;
+  while(rem.length){
+    rem.sort((a,b)=>Math.abs(a-cur)-Math.abs(b-cur)||a-b);
+    cur=rem.shift(); seq.push(cur);
+    const nearbyIndex=rem.findIndex(r=>Math.abs(r-cur)<=20);
+    if(nearbyIndex!==-1){ cur=rem.splice(nearbyIndex,1)[0]; seq.push(cur); }
+  }
+  return seq;
+}
+
+function computeCFQ(head,reqs){
+  const groups=[[],[],[]]; reqs.forEach((r,i)=>groups[i%groups.length].push(r));
+  const seq=[head]; let cur=head;
+  while(groups.some(g=>g.length)){
+    groups.forEach(g=>{
+      if(!g.length) return;
+      g.sort((a,b)=>Math.abs(a-cur)-Math.abs(b-cur)||a-b);
+      cur=g.shift(); seq.push(cur);
+    });
+  }
+  return seq;
+}
+
 function getSeqForAlgo(algo, head, reqs, dir, max){
   switch(algo){
     case 'fcfs': return computeFCFS(head,reqs);
@@ -627,6 +726,11 @@ function getSeqForAlgo(algo, head, reqs, dir, max){
     case 'cscan': return computeCSCAN(head,reqs,dir,max);
     case 'look': return computeLOOK(head,reqs,dir);
     case 'clook': return computeCLOOK(head,reqs,dir);
+    case 'nstep': return computeNStepSCAN(head,reqs,dir,max);
+    case 'fscan': return computeFSCAN(head,reqs,dir,max);
+    case 'deadline': return computeDeadline(head,reqs);
+    case 'anticipatory': return computeAnticipatory(head,reqs);
+    case 'cfq': return computeCFQ(head,reqs);
   }
   return [head];
 }
@@ -657,6 +761,11 @@ function buildStepReason(algo,from,to,dist,reqs,isBoundary,seq,stepIdx){
     case 'cscan': return isBoundary ? `C-SCAN: ${to===0?'Jumped to cylinder 0 (no service on return)':'Reached max cylinder '+to+', jumping to 0 next'}` : `C-SCAN sweeps ${from}→${to} (dist=${dist})`;
     case 'look': return isBoundary ? '' : `LOOK moves ${from}→${to} (dist=${dist}). Unlike SCAN, doesn't go to boundary.`;
     case 'clook': return `C-LOOK: ${from}→${to} (dist=${dist}). ${isBoundary?'Jump to first request in opposite direction.':''}`;
+    case 'nstep': return `N-Step SCAN serves a frozen batch, then moves to the next batch. Move ${from} to ${to}; distance ${dist}.`;
+    case 'fscan': return `FSCAN drains the active queue while newer requests wait in a second queue. Move ${from} to ${to}; distance ${dist}.`;
+    case 'deadline': return `Deadline scheduling chooses nearby requests, but periodically forces an older request before starvation. Move ${from} to ${to}.`;
+    case 'anticipatory': return `Anticipatory scheduling waits for locality, then serves a nearby follow-up if one appears. Move ${from} to ${to}.`;
+    case 'cfq': return `CFQ alternates request groups so one workload cannot monopolize the disk. Move ${from} to ${to}.`;
   }
   return '';
 }
@@ -885,7 +994,7 @@ document.getElementById('compareBtn').onclick=function(){
 function runComparison(){
   const head=parseInt(document.getElementById('headInput').value)||53;
   const max=parseInt(document.getElementById('maxCyl').value)||199;
-  const algos=['fcfs','sstf','scan','cscan','look','clook'];
+  const algos=['fcfs','sstf','scan','cscan','look','clook','nstep','fscan','deadline','anticipatory','cfq'];
   const results=algos.map(a=>{
     const seq=getSeqForAlgo(a,head,[...requests],currentDir,max);
     const steps=buildSteps2(seq);

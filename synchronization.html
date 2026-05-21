@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Synchronization - OS Algorithms</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .sync-grid { display:grid; grid-template-columns:300px minmax(0,1fr) 280px; min-height:calc(100vh - var(--nav-height)); }
+    .actor-row { display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--line); border-radius:var(--radius-md); background:var(--blue-1); margin-bottom:6px; }
+    .actor-state { margin-left:auto; font-size:.72rem; font-weight:800; padding:3px 8px; border-radius:20px; background:var(--blue-2); color:var(--blue-5); }
+    .actor-state.run { background:var(--mem-light); color:#135b49; }
+    .actor-state.wait { background:#fff3d4; color:#7a4800; }
+    .actor-state.block { background:var(--disk-light); color:#8b2500; }
+    .resource-strip { display:flex; flex-wrap:wrap; gap:8px; }
+    .resource-box { min-width:74px; padding:10px; border-radius:var(--radius-md); border:1px solid var(--line); background:var(--panel); text-align:center; font-weight:800; }
+    .resource-box.busy { background:var(--mem-light); border-color:var(--mem-color); color:#135b49; }
+    .resource-box.wait { background:#fff3d4; border-color:#d5a833; color:#7a4800; }
+  </style>
+</head>
+<body>
+<nav class="top-nav">
+  <a class="nav-brand" href="index.html"><div class="nav-brand-mark">OS</div><div><div class="nav-brand-text">OS Algorithms</div><div class="nav-brand-sub">Indian Servers</div></div></a>
+  <div class="nav-links">
+    <a class="nav-link" href="index.html">Home</a>
+    <a class="nav-link" href="cpu-scheduling.html">CPU</a>
+    <a class="nav-link" href="page-replacement.html">Pages</a>
+    <a class="nav-link" href="disk-scheduling.html">Disk</a>
+    <a class="nav-link active" href="synchronization.html">Synchronization</a>
+    <a class="nav-link" href="file-allocation.html">Files</a>
+    <a class="nav-link" href="paging.html">Paging</a>
+    <a class="nav-link" href="io-scheduling.html">I/O</a>
+  </div>
+  <div class="nav-actions"><button class="theme-toggle" id="themeBtn">Moon</button></div>
+</nav>
+
+<div class="sync-grid">
+  <aside class="control-panel">
+    <div class="card-header">
+      <div class="card-icon" style="background:linear-gradient(135deg,#ede5f8,#cbb7ed)">S</div>
+      <div><div class="card-title">Synchronization</div><div class="card-subtitle">Classic concurrency problems</div></div>
+    </div>
+    <div>
+      <div class="section-title">Problem</div>
+      <div class="algo-grid">
+        <div class="algo-option selected" data-demo="producer">Producer Consumer</div>
+        <div class="algo-option" data-demo="readers">Reader Writer</div>
+        <div class="algo-option" data-demo="dining">Dining Philosophers</div>
+        <div class="algo-option" data-demo="barber">Sleeping Barber</div>
+        <div class="algo-option" data-demo="peterson">Peterson</div>
+        <div class="algo-option" data-demo="semaphore">Semaphore</div>
+        <div class="algo-option" data-demo="monitor">Monitor</div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Step</label>
+      <input type="range" id="stepSlider" min="0" max="0" value="0">
+    </div>
+    <button class="btn btn-primary" id="runBtn">Run Demo</button>
+  </aside>
+
+  <main class="viz-panel">
+    <div class="card">
+      <div class="panel-title" id="demoTitle">Producer Consumer</div>
+      <div class="text-muted text-sm" id="demoDesc"></div>
+    </div>
+    <div class="card">
+      <div class="section-title">Actors</div>
+      <div id="actors"></div>
+    </div>
+    <div class="card">
+      <div class="section-title">Shared Resources</div>
+      <div class="resource-strip" id="resources"></div>
+    </div>
+    <div class="card">
+      <div class="section-title">Timeline</div>
+      <div class="step-log" id="timeline"></div>
+    </div>
+  </main>
+
+  <aside class="info-panel">
+    <div class="section-title">Teaching Focus</div>
+    <div id="teaching" class="text-sm text-muted" style="line-height:1.6"></div>
+  </aside>
+</div>
+
+<script>
+const demos={
+  producer:{title:'Producer Consumer',desc:'A bounded buffer is protected by mutex, empty, and full semaphores.',teach:'Shows mutual exclusion, full/empty counting semaphores, and why a producer must wait when the buffer is full.',actors:['Producer','Consumer'],resources:['mutex','empty slots','full slots'],steps:['Producer waits on empty','Producer locks mutex','Producer inserts item','Producer signals full','Consumer waits on full','Consumer locks mutex','Consumer removes item','Consumer signals empty']},
+  readers:{title:'Reader Writer',desc:'Many readers may enter together, but writers need exclusive access.',teach:'Shows reader concurrency, writer exclusion, and the starvation tradeoff between reader-preference and writer-preference policies.',actors:['Reader 1','Reader 2','Writer'],resources:['read count','database','write lock'],steps:['Reader 1 enters and increments count','Reader 2 enters while read lock is shared','Writer waits for readers to finish','Readers exit and release lock','Writer enters exclusively','Writer exits and readers may continue']},
+  dining:{title:'Dining Philosophers',desc:'Philosophers compete for neighboring forks.',teach:'Shows circular wait, deadlock risk, and how ordering or limiting entry prevents every philosopher from holding one fork forever.',actors:['P0','P1','P2','P3','P4'],resources:['F0','F1','F2','F3','F4'],steps:['Each philosopher thinks','P0 takes lower-numbered fork first','P0 takes second fork and eats','Neighbors wait','P0 releases both forks','P2 obtains both forks and eats']},
+  barber:{title:'Sleeping Barber',desc:'Customers wait in limited chairs; the barber sleeps when none exist.',teach:'Shows blocking queues, condition synchronization, and lost-customer behavior when all waiting chairs are full.',actors:['Barber','Customer 1','Customer 2','Customer 3'],resources:['barber chair','waiting chairs','shop door'],steps:['No customers: barber sleeps','Customer 1 wakes barber','Customer 2 waits in chair','Customer 3 waits in chair','More customers leave if chairs are full','Barber serves next waiting customer']},
+  peterson:{title:'Peterson Algorithm',desc:'Two-process software mutual exclusion with flag and turn variables.',teach:'Shows intent flags, turn-based tie breaking, bounded waiting, and why both processes cannot enter the critical section together.',actors:['Process 0','Process 1'],resources:['flag[0]','flag[1]','turn','critical section'],steps:['P0 sets flag[0]=true','P0 gives turn to P1','P1 sets flag[1]=true','P1 gives turn to P0','P0 enters because turn favors it','P0 clears flag[0] on exit']},
+  semaphore:{title:'Semaphore Pattern',desc:'wait() decrements a counter; signal() increments it.',teach:'Shows how counting semaphores model finite resources and how binary semaphores model mutex locks.',actors:['Process A','Process B','Process C'],resources:['semaphore count','resource pool'],steps:['Count starts at 2','A waits and enters','B waits and enters','C waits because count is 0','A signals on exit','C enters']},
+  monitor:{title:'Monitor Pattern',desc:'A monitor wraps shared state with implicit mutual exclusion and condition variables.',teach:'Shows higher-level synchronization with wait and notify instead of manual semaphore ordering.',actors:['Thread A','Thread B','Monitor'],resources:['lock','condition queue','shared state'],steps:['A enters monitor','A finds condition false and waits','Lock is released while A waits','B enters and updates state','B notifies condition','A resumes inside monitor']}
+};
+let current='producer', step=0;
+const root=document.documentElement, themeBtn=document.getElementById('themeBtn');
+root.setAttribute('data-theme',localStorage.getItem('os-theme')||'light');
+themeBtn.onclick=()=>{const n=root.getAttribute('data-theme')==='dark'?'light':'dark';root.setAttribute('data-theme',n);localStorage.setItem('os-theme',n);};
+document.querySelectorAll('.algo-option').forEach(el=>el.onclick=()=>{document.querySelectorAll('.algo-option').forEach(x=>x.classList.remove('selected'));el.classList.add('selected');current=el.dataset.demo;step=0;render();});
+document.getElementById('runBtn').onclick=()=>{step=demos[current].steps.length-1;render();};
+document.getElementById('stepSlider').oninput=e=>{step=+e.target.value;render();};
+function render(){
+  const d=demos[current];
+  document.getElementById('demoTitle').textContent=d.title;
+  document.getElementById('demoDesc').textContent=d.desc;
+  document.getElementById('teaching').textContent=d.teach;
+  document.getElementById('stepSlider').max=d.steps.length-1;
+  document.getElementById('stepSlider').value=step;
+  document.getElementById('actors').innerHTML=d.actors.map((a,i)=>`<div class="actor-row"><strong>${a}</strong><span class="actor-state ${i===step%d.actors.length?'run':i<step?'wait':''}">${i===step%d.actors.length?'active':i<step?'waiting':'ready'}</span></div>`).join('');
+  document.getElementById('resources').innerHTML=d.resources.map((r,i)=>`<div class="resource-box ${i<=step%d.resources.length?'busy':''}">${r}</div>`).join('');
+  document.getElementById('timeline').innerHTML=d.steps.map((s,i)=>`<div class="step-entry ${i===step?'current':i<step?'success':''}">${i+1}. ${s}</div>`).join('');
+}
+render();
+</script>
+</body>
+</html>

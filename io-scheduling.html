@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>I/O Concepts - OS Algorithms</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .io-layout { display:grid; grid-template-columns:300px minmax(0,1fr) 280px; min-height:calc(100vh - var(--nav-height)); }
+    .pipe { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .pipe-node { padding:12px 14px; border:1px solid var(--line); border-radius:var(--radius-md); background:var(--blue-1); font-weight:800; min-width:110px; text-align:center; }
+    .pipe-node.active { background:var(--mem-light); border-color:var(--mem-color); color:#135b49; }
+    .arrow { color:var(--muted); font-weight:900; }
+  </style>
+</head>
+<body>
+<nav class="top-nav">
+  <a class="nav-brand" href="index.html"><div class="nav-brand-mark">OS</div><div><div class="nav-brand-text">OS Algorithms</div><div class="nav-brand-sub">Indian Servers</div></div></a>
+  <div class="nav-links">
+    <a class="nav-link" href="index.html">Home</a>
+    <a class="nav-link" href="disk-scheduling.html">Disk</a>
+    <a class="nav-link active" href="io-scheduling.html">I/O</a>
+    <a class="nav-link" href="file-allocation.html">Files</a>
+  </div>
+  <div class="nav-actions"><button class="theme-toggle" id="themeBtn">Moon</button></div>
+</nav>
+<div class="io-layout">
+  <aside class="control-panel">
+    <div class="card-header"><div class="card-icon" style="background:linear-gradient(135deg,#dceeff,#9bc8ef)">IO</div><div><div class="card-title">I/O Concepts</div><div class="card-subtitle">Device flow visualizer</div></div></div>
+    <div class="section-title">Concept</div>
+    <div class="algo-grid">
+      <div class="algo-option selected" data-mode="interrupt">Interrupt Flow</div>
+      <div class="algo-option" data-mode="dma">DMA Transfer</div>
+      <div class="algo-option" data-mode="spooling">Spooling</div>
+      <div class="algo-option" data-mode="devicequeue">Device Queue</div>
+    </div>
+    <div class="form-group mt-3"><label class="form-label">Step</label><input type="range" id="stepSlider" min="0" value="0"></div>
+    <button class="btn btn-primary" id="runBtn">Run Flow</button>
+  </aside>
+  <main class="viz-panel">
+    <div class="card"><div class="panel-title" id="title">Interrupt Flow</div><div class="text-muted text-sm" id="desc"></div></div>
+    <div class="card"><div class="section-title">Pipeline</div><div class="pipe" id="pipe"></div></div>
+    <div class="card"><div class="section-title">Steps</div><div class="step-log" id="log"></div></div>
+  </main>
+  <aside class="info-panel"><div class="section-title">Why It Matters</div><div id="why" class="text-sm text-muted" style="line-height:1.6"></div></aside>
+</div>
+<script>
+const flows={
+  interrupt:{title:'Interrupt Handling Flow',desc:'A device interrupts the CPU, the OS saves context, runs an ISR, and resumes work.',why:'Interrupts avoid wasteful polling and let the CPU respond quickly to device events.',nodes:['Device','Interrupt Controller','CPU','ISR','Scheduler','Process'],steps:['Device raises interrupt','CPU finishes current instruction','OS saves process context','Interrupt service routine handles device','Scheduler chooses next runnable process','Process resumes']},
+  dma:{title:'DMA Transfer',desc:'A DMA controller moves data between device and memory without CPU copying every byte.',why:'DMA improves throughput because the CPU sets up the transfer and only returns when completion is signaled.',nodes:['CPU','DMA Controller','Device','Memory','Interrupt'],steps:['CPU programs DMA registers','Device streams data to DMA','DMA writes directly to memory','CPU continues other work','DMA raises completion interrupt']},
+  spooling:{title:'Spooling',desc:'Jobs are staged on disk so a slow device, such as a printer, can consume them at its own speed.',why:'Spooling decouples fast producers from slow devices and improves sharing.',nodes:['App','Spool Directory','Queue Manager','Device Driver','Printer'],steps:['Application writes job to spool','Queue manager orders jobs','Driver feeds device','Printer completes job','Spool file is removed']},
+  devicequeue:{title:'Device Queue Scheduling',desc:'The OS queues requests, selects the next one, starts I/O, and wakes the waiting process on completion.',why:'Device queues make blocking I/O fair and observable; policies can optimize latency or throughput.',nodes:['Process A','Process B','I/O Queue','Driver','Device','Wakeup'],steps:['Processes issue I/O requests','Requests wait in device queue','Scheduler selects a request','Driver starts hardware operation','Device completes request','OS wakes blocked process']}
+};
+let mode='interrupt', step=0;
+const root=document.documentElement, themeBtn=document.getElementById('themeBtn');
+root.setAttribute('data-theme',localStorage.getItem('os-theme')||'light');
+themeBtn.onclick=()=>{const n=root.getAttribute('data-theme')==='dark'?'light':'dark';root.setAttribute('data-theme',n);localStorage.setItem('os-theme',n);};
+document.querySelectorAll('.algo-option').forEach(el=>el.onclick=()=>{document.querySelectorAll('.algo-option').forEach(x=>x.classList.remove('selected'));el.classList.add('selected');mode=el.dataset.mode;step=0;render();});
+document.getElementById('runBtn').onclick=()=>{step=flows[mode].steps.length-1;render();};
+document.getElementById('stepSlider').oninput=e=>{step=+e.target.value;render();};
+function render(){
+  const f=flows[mode];
+  document.getElementById('title').textContent=f.title; document.getElementById('desc').textContent=f.desc; document.getElementById('why').textContent=f.why;
+  document.getElementById('stepSlider').max=f.steps.length-1; document.getElementById('stepSlider').value=step;
+  document.getElementById('pipe').innerHTML=f.nodes.map((n,i)=>`<div class="pipe-node ${i<=step?'active':''}">${n}</div>${i<f.nodes.length-1?'<span class="arrow">-&gt;</span>':''}`).join('');
+  document.getElementById('log').innerHTML=f.steps.map((s,i)=>`<div class="step-entry ${i===step?'current':i<step?'success':''}">${i+1}. ${s}</div>`).join('');
+}
+render();
+</script>
+</body>
+</html>

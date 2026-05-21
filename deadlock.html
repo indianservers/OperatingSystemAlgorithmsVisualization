@@ -264,6 +264,24 @@
     <div id="metricsArea" style="display:none">
       <div class="metrics-grid" id="metricsGrid"></div>
     </div>
+
+    <div class="card">
+      <div class="panel-title">Deadlock Method Library</div>
+      <div class="metrics-grid">
+        <div class="metric-card"><div class="metric-value" style="font-size:1rem">RAG</div><div class="metric-label">Resource Allocation Graph</div></div>
+        <div class="metric-card"><div class="metric-value" style="font-size:1rem">Detect</div><div class="metric-label">Detection Matrix</div></div>
+        <div class="metric-card"><div class="metric-value" style="font-size:1rem">Avoid</div><div class="metric-label">Banker's Algorithm</div></div>
+        <div class="metric-card"><div class="metric-value" style="font-size:1rem">Prevent</div><div class="metric-label">Break Coffman Conditions</div></div>
+        <div class="metric-card"><div class="metric-value" style="font-size:1rem">Recover</div><div class="metric-label">Abort / Preempt</div></div>
+      </div>
+      <div class="step-log mt-3">
+        <div class="step-entry">Resource Allocation Graph: cycles reveal deadlock for single-instance resources and possible deadlock for multiple instances.</div>
+        <div class="step-entry">Detection: repeatedly find a process whose outstanding request can be satisfied, then release its allocation.</div>
+        <div class="step-entry">Prevention: deny at least one condition: mutual exclusion, hold-and-wait, no preemption, or circular wait.</div>
+        <div class="step-entry">Avoidance: use Banker's Algorithm to enter only states with a safe sequence.</div>
+        <div class="step-entry">Recovery: select a victim process, abort it or preempt resources, then roll back safely.</div>
+      </div>
+    </div>
   </main>
 
   <!-- Info Panel -->

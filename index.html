@@ -23,6 +23,10 @@
     <a class="nav-link" href="disk-scheduling.html"><span class="dot" style="background:#ef6c3e"></span>Disk Scheduling</a>
     <a class="nav-link" href="deadlock.html"><span class="dot" style="background:#5865f2"></span>Deadlock</a>
     <a class="nav-link" href="memory-allocation.html"><span class="dot" style="background:#0f9f9a"></span>Memory Allocation</a>
+    <a class="nav-link" href="synchronization.html"><span class="dot" style="background:#7c5bb0"></span>Synchronization</a>
+    <a class="nav-link" href="file-allocation.html"><span class="dot" style="background:#d59a26"></span>File Allocation</a>
+    <a class="nav-link" href="paging.html"><span class="dot" style="background:#0f9f9a"></span>Paging</a>
+    <a class="nav-link" href="io-scheduling.html"><span class="dot" style="background:#1673c7"></span>I/O</a>
   </div>
   <div class="nav-actions">
     <button class="theme-toggle" id="themeBtn" title="Toggle theme">🌙</button>
@@ -117,6 +121,63 @@
       <span class="tag" style="background:#ccf0ef; color:#0a5c59; border-color:#88d8d6">Best Fit</span>
       <span class="tag" style="background:#ccf0ef; color:#0a5c59; border-color:#88d8d6">Worst Fit</span>
       <span class="tag" style="background:#ccf0ef; color:#0a5c59; border-color:#88d8d6">Next Fit</span>
+    </div>
+  </a>
+
+  <a href="synchronization.html" class="algo-card fade-in" style="--card-accent: #7c5bb0; animation-delay: 0.25s">
+    <div class="algo-card-icon" style="background: linear-gradient(135deg, #ede5f8, #cbb7ed)">S</div>
+    <div class="algo-card-title">Process Synchronization</div>
+    <div class="algo-card-desc">
+      Step through classic concurrency problems and see how locks, semaphores, monitors, and condition queues coordinate shared resources.
+    </div>
+    <div class="algo-card-tags">
+      <span class="tag" style="background:#ede5f8; color:#43236e; border-color:#cbb7ed">Producer Consumer</span>
+      <span class="tag" style="background:#ede5f8; color:#43236e; border-color:#cbb7ed">Reader Writer</span>
+      <span class="tag" style="background:#ede5f8; color:#43236e; border-color:#cbb7ed">Dining Philosophers</span>
+      <span class="tag" style="background:#ede5f8; color:#43236e; border-color:#cbb7ed">Peterson</span>
+    </div>
+  </a>
+
+  <a href="file-allocation.html" class="algo-card fade-in" style="--card-accent: #d59a26; animation-delay: 0.3s">
+    <div class="algo-card-icon" style="background: linear-gradient(135deg, #fff3d4, #f2d37a)">F</div>
+    <div class="algo-card-title">File Allocation</div>
+    <div class="algo-card-desc">
+      Compare how file systems place blocks on disk and how metadata changes access, growth, fragmentation, and fault risk.
+    </div>
+    <div class="algo-card-tags">
+      <span class="tag" style="background:#fff3d4; color:#7a4800; border-color:#d5a833">Contiguous</span>
+      <span class="tag" style="background:#fff3d4; color:#7a4800; border-color:#d5a833">Linked</span>
+      <span class="tag" style="background:#fff3d4; color:#7a4800; border-color:#d5a833">Indexed</span>
+      <span class="tag" style="background:#fff3d4; color:#7a4800; border-color:#d5a833">FAT</span>
+      <span class="tag" style="background:#fff3d4; color:#7a4800; border-color:#d5a833">Inode</span>
+    </div>
+  </a>
+
+  <a href="paging.html" class="algo-card fade-in" style="--card-accent: #0f9f9a; animation-delay: 0.35s">
+    <div class="algo-card-icon" style="background: linear-gradient(135deg, #ccf0ef, #88d8d6)">P</div>
+    <div class="algo-card-title">Paging & Address Translation</div>
+    <div class="algo-card-desc">
+      Break logical addresses into page, offset, segment, base, and frame mappings while comparing paging, segmentation, buddy allocation, and compaction.
+    </div>
+    <div class="algo-card-tags">
+      <span class="tag" style="background:#ccf0ef; color:#0a5c59; border-color:#88d8d6">Paging</span>
+      <span class="tag" style="background:#ccf0ef; color:#0a5c59; border-color:#88d8d6">Segmentation</span>
+      <span class="tag" style="background:#ccf0ef; color:#0a5c59; border-color:#88d8d6">Buddy</span>
+      <span class="tag" style="background:#ccf0ef; color:#0a5c59; border-color:#88d8d6">Compaction</span>
+    </div>
+  </a>
+
+  <a href="io-scheduling.html" class="algo-card fade-in" style="--card-accent: #1673c7; animation-delay: 0.4s">
+    <div class="algo-card-icon" style="background: linear-gradient(135deg, #dceeff, #9bc8ef)">IO</div>
+    <div class="algo-card-title">I/O and Device Flow</div>
+    <div class="algo-card-desc">
+      Visualize interrupt handling, DMA, spooling, and device queue scheduling as ordered OS pipelines.
+    </div>
+    <div class="algo-card-tags">
+      <span class="tag" style="background:#dceeff; color:#1a4a82; border-color:#9bc8ef">Interrupts</span>
+      <span class="tag" style="background:#dceeff; color:#1a4a82; border-color:#9bc8ef">DMA</span>
+      <span class="tag" style="background:#dceeff; color:#1a4a82; border-color:#9bc8ef">Spooling</span>
+      <span class="tag" style="background:#dceeff; color:#1a4a82; border-color:#9bc8ef">Queues</span>
     </div>
   </a>
 

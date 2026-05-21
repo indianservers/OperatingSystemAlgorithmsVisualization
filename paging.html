@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paging and Memory Mapping - OS Algorithms</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .paging-layout { display:grid; grid-template-columns:300px minmax(0,1fr) 280px; min-height:calc(100vh - var(--nav-height)); }
+    .bit-boxes { display:flex; gap:8px; flex-wrap:wrap; }
+    .bit-box { padding:12px 16px; border:1px solid var(--line); border-radius:var(--radius-md); background:var(--blue-1); min-width:110px; text-align:center; }
+    .bit-value { font-size:1.25rem; font-weight:900; color:var(--accent); }
+    .memory-stack { display:flex; flex-direction:column; gap:5px; }
+    .memory-line { display:flex; justify-content:space-between; padding:8px 10px; border:1px solid var(--line); border-radius:var(--radius-md); background:var(--panel); }
+    .memory-line.hit { background:var(--mem-light); border-color:var(--mem-color); color:#135b49; }
+  </style>
+</head>
+<body>
+<nav class="top-nav">
+  <a class="nav-brand" href="index.html"><div class="nav-brand-mark">OS</div><div><div class="nav-brand-text">OS Algorithms</div><div class="nav-brand-sub">Indian Servers</div></div></a>
+  <div class="nav-links">
+    <a class="nav-link" href="index.html">Home</a>
+    <a class="nav-link" href="memory-allocation.html">Allocation</a>
+    <a class="nav-link active" href="paging.html">Paging</a>
+    <a class="nav-link" href="page-replacement.html">Replacement</a>
+  </div>
+  <div class="nav-actions"><button class="theme-toggle" id="themeBtn">Moon</button></div>
+</nav>
+<div class="paging-layout">
+  <aside class="control-panel">
+    <div class="card-header"><div class="card-icon" style="background:linear-gradient(135deg,#ccf0ef,#88d8d6)">P</div><div><div class="card-title">Paging</div><div class="card-subtitle">Address translation</div></div></div>
+    <div class="section-title">Topic</div>
+    <div class="algo-grid">
+      <div class="algo-option selected" data-mode="paging">Paging</div>
+      <div class="algo-option" data-mode="segmentation">Segmentation</div>
+      <div class="algo-option" data-mode="buddy">Buddy System</div>
+      <div class="algo-option" data-mode="compaction">Compaction</div>
+    </div>
+    <div class="form-group mt-3"><label class="form-label">Logical Address</label><input type="number" id="addrInput" min="0" max="4095" value="1426"></div>
+    <div class="form-group"><label class="form-label">Page Size</label><select id="pageSize"><option>256</option><option selected>512</option><option>1024</option></select></div>
+    <button class="btn btn-primary" id="runBtn">Translate</button>
+  </aside>
+  <main class="viz-panel">
+    <div class="card"><div class="panel-title" id="title">Paging Address Translation</div><div class="text-muted text-sm" id="desc"></div></div>
+    <div class="card"><div class="section-title">Breakdown</div><div class="bit-boxes" id="breakdown"></div></div>
+    <div class="card"><div class="section-title">Mapping Table</div><div class="memory-stack" id="table"></div></div>
+    <div class="card"><div class="section-title">Decision Log</div><div class="step-log" id="log"></div></div>
+  </main>
+  <aside class="info-panel"><div class="section-title">Concept</div><div id="concept" class="text-sm text-muted" style="line-height:1.6"></div></aside>
+</div>
+<script>
+const details={
+  paging:['Paging Address Translation','Logical address = page number + offset. Page table maps page to frame.','Paging removes external fragmentation by using fixed-size pages and frames.'],
+  segmentation:['Segmentation','Logical address = segment number + offset. Segment table checks limit and adds base.','Segmentation matches programmer-visible regions like code, stack, and heap, but can fragment memory.'],
+  buddy:['Buddy System','Memory is split into power-of-two buddies until a suitable block appears.','Buddy allocation makes splitting and merging fast, but may create internal fragmentation.'],
+  compaction:['Compaction','Allocated blocks are moved together so scattered holes become one large free space.','Compaction fights external fragmentation but requires relocation and copying cost.']
+};
+let mode='paging';
+const pageTable=[3,5,1,7,2,6,4,0];
+const segs=[{name:'code',base:1200,limit:700},{name:'heap',base:3000,limit:900},{name:'stack',base:5200,limit:500}];
+const root=document.documentElement, themeBtn=document.getElementById('themeBtn');
+root.setAttribute('data-theme',localStorage.getItem('os-theme')||'light');
+themeBtn.onclick=()=>{const n=root.getAttribute('data-theme')==='dark'?'light':'dark';root.setAttribute('data-theme',n);localStorage.setItem('os-theme',n);};
+document.querySelectorAll('.algo-option').forEach(el=>el.onclick=()=>{document.querySelectorAll('.algo-option').forEach(x=>x.classList.remove('selected'));el.classList.add('selected');mode=el.dataset.mode;render();});
+document.getElementById('runBtn').onclick=render;
+function box(label,val){return `<div class="bit-box"><div class="text-xs text-muted">${label}</div><div class="bit-value">${val}</div></div>`;}
+function render(){
+  const [title,desc,concept]=details[mode]; const addr=+document.getElementById('addrInput').value||0; const size=+document.getElementById('pageSize').value;
+  document.getElementById('title').textContent=title; document.getElementById('desc').textContent=desc; document.getElementById('concept').textContent=concept;
+  if(mode==='paging'){
+    const page=Math.floor(addr/size), off=addr%size, frame=pageTable[page%pageTable.length], phys=frame*size+off;
+    document.getElementById('breakdown').innerHTML=box('page',page)+box('offset',off)+box('frame',frame)+box('physical',phys);
+    document.getElementById('table').innerHTML=pageTable.map((f,p)=>`<div class="memory-line ${p===page%pageTable.length?'hit':''}"><strong>Page ${p}</strong><span>Frame ${f}</span></div>`).join('');
+    document.getElementById('log').innerHTML=`<div class="step-entry current">1. Divide ${addr} by page size ${size}: page ${page}, offset ${off}</div><div class="step-entry success">2. Page table maps page ${page%pageTable.length} to frame ${frame}</div><div class="step-entry success">3. Physical address = ${frame} * ${size} + ${off} = ${phys}</div>`;
+  } else if(mode==='segmentation'){
+    const seg=addr%segs.length, off=Math.floor(addr/segs.length)%900, s=segs[seg], valid=off<s.limit;
+    document.getElementById('breakdown').innerHTML=box('segment',seg)+box('offset',off)+box('base',s.base)+box('physical',valid?s.base+off:'fault');
+    document.getElementById('table').innerHTML=segs.map((s,i)=>`<div class="memory-line ${i===seg?'hit':''}"><strong>${i}: ${s.name}</strong><span>base ${s.base}, limit ${s.limit}</span></div>`).join('');
+    document.getElementById('log').innerHTML=`<div class="step-entry current">1. Choose segment ${seg} (${s.name})</div><div class="step-entry ${valid?'success':'error'}">2. Offset ${off} ${valid?'is within':'exceeds'} limit ${s.limit}</div>`;
+  } else {
+    const blocks=mode==='buddy'?[1024,512,256,256,512,1024]:[240,80,420,60,300,140];
+    document.getElementById('breakdown').innerHTML=box('request',addr%700+80)+box('blocks',blocks.length)+box(mode==='buddy'?'split level':'holes merged',mode==='buddy'?'power of 2':'one free run');
+    document.getElementById('table').innerHTML=blocks.map((b,i)=>`<div class="memory-line ${i===2?'hit':''}"><strong>Block ${i}</strong><span>${b} KB</span></div>`).join('');
+    document.getElementById('log').innerHTML=mode==='buddy'
+      ? '<div class="step-entry current">1. Round request to the next power of two</div><div class="step-entry success">2. Split a larger buddy until sizes match</div><div class="step-entry success">3. Merge free buddies on release</div>'
+      : '<div class="step-entry current">1. Identify scattered free holes</div><div class="step-entry success">2. Relocate allocated blocks together</div><div class="step-entry success">3. Combine holes into one large free block</div>';
+  }
+}
+render();
+</script>
+</body>
+</html>

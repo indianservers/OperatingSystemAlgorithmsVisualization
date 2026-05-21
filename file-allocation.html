@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>File Allocation - OS Algorithms</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .file-layout { display:grid; grid-template-columns:300px minmax(0,1fr) 280px; min-height:calc(100vh - var(--nav-height)); }
+    .disk-blocks { display:grid; grid-template-columns:repeat(auto-fill,minmax(58px,1fr)); gap:8px; }
+    .disk-block { min-height:54px; border:1px solid var(--line); border-radius:var(--radius-md); background:var(--blue-1); display:flex; flex-direction:column; align-items:center; justify-content:center; font-weight:800; }
+    .disk-block.used { background:var(--mem-light); border-color:var(--mem-color); color:#135b49; }
+    .disk-block.index { background:var(--deadlock-light); border-color:var(--deadlock-color); color:#2d3191; }
+    .disk-block.meta { background:#fff3d4; border-color:#d5a833; color:#7a4800; }
+    .mini { font-size:.68rem; color:var(--muted); font-weight:600; margin-top:2px; }
+  </style>
+</head>
+<body>
+<nav class="top-nav">
+  <a class="nav-brand" href="index.html"><div class="nav-brand-mark">OS</div><div><div class="nav-brand-text">OS Algorithms</div><div class="nav-brand-sub">Indian Servers</div></div></a>
+  <div class="nav-links">
+    <a class="nav-link" href="index.html">Home</a>
+    <a class="nav-link" href="disk-scheduling.html">Disk</a>
+    <a class="nav-link active" href="file-allocation.html">File Allocation</a>
+    <a class="nav-link" href="paging.html">Paging</a>
+    <a class="nav-link" href="synchronization.html">Synchronization</a>
+  </div>
+  <div class="nav-actions"><button class="theme-toggle" id="themeBtn">Moon</button></div>
+</nav>
+<div class="file-layout">
+  <aside class="control-panel">
+    <div class="card-header"><div class="card-icon" style="background:linear-gradient(135deg,#fde8df,#f9baa0)">F</div><div><div class="card-title">File Allocation</div><div class="card-subtitle">Blocks and metadata</div></div></div>
+    <div class="section-title">Method</div>
+    <div class="algo-grid">
+      <div class="algo-option selected" data-mode="contiguous">Contiguous</div>
+      <div class="algo-option" data-mode="linked">Linked</div>
+      <div class="algo-option" data-mode="indexed">Indexed</div>
+      <div class="algo-option" data-mode="fat">FAT</div>
+      <div class="algo-option" data-mode="inode">Inode</div>
+    </div>
+    <div class="form-group mt-3"><label class="form-label">File size blocks</label><input type="number" id="sizeInput" min="2" max="12" value="6"></div>
+    <div class="form-group"><label class="form-label">Start block</label><input type="number" id="startInput" min="0" max="23" value="4"></div>
+    <button class="btn btn-primary" id="runBtn">Allocate</button>
+  </aside>
+  <main class="viz-panel">
+    <div class="card"><div class="panel-title" id="title">Contiguous Allocation</div><div class="text-muted text-sm" id="desc"></div></div>
+    <div class="card"><div class="section-title">Disk Blocks</div><div class="disk-blocks" id="blocks"></div></div>
+    <div class="card"><div class="section-title">Access Path</div><div class="step-log" id="log"></div></div>
+  </main>
+  <aside class="info-panel"><div class="section-title">Tradeoffs</div><div id="tradeoffs" class="text-sm text-muted" style="line-height:1.6"></div></aside>
+</div>
+<script>
+const info={
+  contiguous:['Contiguous Allocation','File blocks occupy consecutive disk addresses.','Fast sequential and direct access, but external fragmentation and growth are hard.'],
+  linked:['Linked Allocation','Each file block points to the next file block.','No external fragmentation, but random access is slow and pointer loss can break the chain.'],
+  indexed:['Indexed Allocation','A separate index block stores all data-block addresses.','Good direct access without contiguity, but the index block adds overhead.'],
+  fat:['FAT Allocation','A table stores next-block links for every block.','Keeps linked metadata centralized; simple, but the FAT can become large and cache-sensitive.'],
+  inode:['Inode Allocation','An inode stores direct pointers and can point to indirect pointer blocks.','Scales from small to large files and powers Unix-like file systems.']
+};
+let mode='contiguous';
+const root=document.documentElement, themeBtn=document.getElementById('themeBtn');
+root.setAttribute('data-theme',localStorage.getItem('os-theme')||'light');
+themeBtn.onclick=()=>{const n=root.getAttribute('data-theme')==='dark'?'light':'dark';root.setAttribute('data-theme',n);localStorage.setItem('os-theme',n);};
+document.querySelectorAll('.algo-option').forEach(el=>el.onclick=()=>{document.querySelectorAll('.algo-option').forEach(x=>x.classList.remove('selected'));el.classList.add('selected');mode=el.dataset.mode;render();});
+document.getElementById('runBtn').onclick=render;
+function allocation(){
+  const size=Math.max(2,Math.min(12,+document.getElementById('sizeInput').value||6));
+  const start=Math.max(0,Math.min(23,+document.getElementById('startInput').value||4));
+  if(mode==='contiguous') return Array.from({length:size},(_,i)=>(start+i)%24);
+  if(mode==='linked'||mode==='fat') return Array.from({length:size},(_,i)=>(start+i*3)%24);
+  if(mode==='indexed') return [start,...Array.from({length:size},(_,i)=>(start+2+i*3)%24)];
+  return [start,...Array.from({length:size},(_,i)=>(start+1+i*2)%24), (start+17)%24];
+}
+function render(){
+  const [title,desc,trade]=info[mode]; const alloc=allocation();
+  document.getElementById('title').textContent=title;
+  document.getElementById('desc').textContent=desc;
+  document.getElementById('tradeoffs').textContent=trade;
+  document.getElementById('blocks').innerHTML=Array.from({length:24},(_,i)=>{
+    const used=alloc.includes(i);
+    const idx=(mode==='indexed'&&i===alloc[0])||(mode==='inode'&&(i===alloc[0]||i===alloc[alloc.length-1]));
+    const fat=mode==='fat'&&i<6;
+    return `<div class="disk-block ${idx?'index':fat?'meta':used?'used':''}">B${i}<div class="mini">${idx?'metadata':fat?'FAT':used?'file':''}</div></div>`;
+  }).join('');
+  const data=mode==='indexed'||mode==='inode'?alloc.slice(1):alloc;
+  document.getElementById('log').innerHTML=data.map((b,i)=>`<div class="step-entry ${i===0?'current':'success'}">${i+1}. ${mode==='contiguous'?'offset '+i+' maps directly to ':mode==='linked'?'follow pointer to ':mode==='fat'?'FAT entry points to ':mode==='indexed'?'index entry points to ':'inode pointer reaches '}block ${b}</div>`).join('');
+}
+render();
+</script>
+</body>
+</html>

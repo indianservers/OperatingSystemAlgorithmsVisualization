@@ -207,6 +207,12 @@
     <div class="algo-tab" data-algo="lfu">LFU</div>
     <div class="algo-tab" data-algo="optimal">Optimal</div>
     <div class="algo-tab" data-algo="clock">Second Chance</div>
+    <div class="algo-tab" data-algo="mru">MRU</div>
+    <div class="algo-tab" data-algo="nru">NRU</div>
+    <div class="algo-tab" data-algo="enhanced_clock">Enhanced Clock</div>
+    <div class="algo-tab" data-algo="working_set">Working Set</div>
+    <div class="algo-tab" data-algo="wsclock">WSClock</div>
+    <div class="algo-tab" data-algo="random">Random</div>
   </div>
   <div class="toolbar-sep"></div>
   <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -480,7 +486,13 @@ const ALGO_INFO = {
   lru:'<strong>LRU</strong> — Least Recently Used<br>Evicts the page that was used the <strong>least recently</strong>. Based on temporal locality. No Bélady\'s anomaly. Expensive to implement.',
   lfu:'<strong>LFU</strong> — Least Frequently Used<br>Evicts the page with the <strong>lowest access frequency</strong>. Favors frequently-used pages. Can suffer from old pages with high past-frequency staying too long.',
   optimal:'<strong>Optimal (Bélády)</strong> — Best possible<br>Evicts the page that will be used <strong>farthest in the future</strong>. Requires future knowledge — not implementable in real systems, but used as a benchmark.',
-  clock:'<strong>Second Chance (Clock)</strong> — Practical LRU approximation<br>Uses a reference bit. Pages with bit=1 get a second chance (bit set to 0, clock advances). Evicts first page with bit=0.'
+  clock:'<strong>Second Chance (Clock)</strong> — Practical LRU approximation<br>Uses a reference bit. Pages with bit=1 get a second chance (bit set to 0, clock advances). Evicts first page with bit=0.',
+  mru:'<strong>MRU</strong> — Most Recently Used<br>Evicts the page touched most recently. Useful for teaching that recency is not always the same as usefulness.',
+  nru:'<strong>NRU</strong> — Not Recently Used<br>Classifies pages by referenced/modified bits and evicts from the lowest class. This visualization approximates those classes with reference bits.',
+  enhanced_clock:'<strong>Enhanced Second Chance</strong><br>Clock with referenced and modified-bit classes. Clean, unreferenced pages are preferred before dirty pages.',
+  working_set:'<strong>Working Set</strong><br>Keeps pages used in a recent time window. Pages outside the window become eviction candidates.',
+  wsclock:'<strong>WSClock</strong><br>Combines Clock with Working Set age checks, making it practical for large memories.',
+  random:'<strong>Random Replacement</strong><br>Evicts a random frame. Simple and useful as a baseline, but not workload-aware.'
 };
 
 // ── Algo tabs ──────────────────────────────────────────
@@ -493,7 +505,7 @@ document.querySelectorAll('.algo-tab').forEach(tab=>{
 });
 
 function updateAlgoUI(){
-  const names={fifo:'First In First Out (FIFO)',lru:'Least Recently Used (LRU)',lfu:'Least Frequently Used (LFU)',optimal:"Optimal (Bélády's)",clock:'Second Chance (Clock)'};
+  const names={fifo:'First In First Out (FIFO)',lru:'Least Recently Used (LRU)',lfu:'Least Frequently Used (LFU)',optimal:"Optimal (Bélády's)",clock:'Second Chance (Clock)',mru:'Most Recently Used (MRU)',nru:'Not Recently Used (NRU)',enhanced_clock:'Enhanced Second Chance',working_set:'Working Set',wsclock:'WSClock',random:'Random Replacement'};
   document.getElementById('algoSubtitle').textContent=names[currentAlgo];
   document.getElementById('algoCard').innerHTML=ALGO_INFO[currentAlgo];
 }
@@ -526,7 +538,7 @@ function runAlgo(refs, nF, algo){
       if(emptyIdx!==-1){
         frames[emptyIdx]=page;
         if(algo==='fifo') fifoQ.push(page);
-        if(algo==='clock') usebit[emptyIdx]=1;
+        if(['clock','nru','enhanced_clock','wsclock'].includes(algo)) usebit[emptyIdx]=1;
       } else {
         if(algo==='fifo'){
           evicted=fifoQ.shift();
@@ -573,6 +585,45 @@ function runAlgo(refs, nF, algo){
             }
           }
           whyEvict=`P${evicted} had reference bit=0 (given second chance and bit cleared, then evicted)`;
+        } else if(algo==='mru'){
+          const mruPage=lruOrder[lruOrder.length-1];
+          const idx=frames.indexOf(mruPage);
+          evicted=mruPage; frames[idx]=page;
+          whyEvict=`P${evicted} was the most recently used page`;
+        } else if(algo==='nru'){
+          const idx=usebit.findIndex((bit,fi)=>bit===0 && frames[fi]!==-1);
+          const victimIdx=idx!==-1?idx:0;
+          evicted=frames[victimIdx]; frames[victimIdx]=page; usebit[victimIdx]=1;
+          whyEvict=`P${evicted} was not recently used (reference bit 0)`;
+        } else if(algo==='enhanced_clock'){
+          let loops=0;
+          while(loops<nF*2){
+            if(usebit[clockPtr]===0){ break; }
+            usebit[clockPtr]=0; clockPtr=(clockPtr+1)%nF; loops++;
+          }
+          evicted=frames[clockPtr]; frames[clockPtr]=page; usebit[clockPtr]=1; clockPtr=(clockPtr+1)%nF;
+          whyEvict=`P${evicted} was the first low-class page found by the enhanced clock scan`;
+        } else if(algo==='working_set'){
+          const windowStart=Math.max(0,i-4);
+          let victimIdx=frames.findIndex(f=>refs.slice(windowStart,i).indexOf(f)===-1);
+          if(victimIdx===-1) victimIdx=0;
+          evicted=frames[victimIdx]; frames[victimIdx]=page;
+          whyEvict=`P${evicted} was outside the recent working-set window`;
+        } else if(algo==='wsclock'){
+          let victimIdx=-1, loops=0;
+          while(loops<nF){
+            const f=frames[clockPtr];
+            const last=lruOrder.lastIndexOf(f);
+            if(usebit[clockPtr]===0 && (last===-1 || i-last>3)){ victimIdx=clockPtr; break; }
+            usebit[clockPtr]=0; clockPtr=(clockPtr+1)%nF; loops++;
+          }
+          if(victimIdx===-1) victimIdx=clockPtr;
+          evicted=frames[victimIdx]; frames[victimIdx]=page; usebit[victimIdx]=1; clockPtr=(victimIdx+1)%nF;
+          whyEvict=`P${evicted} failed the WSClock recent-use age check`;
+        } else if(algo==='random'){
+          const idx=(i*7+page)%nF;
+          evicted=frames[idx]; frames[idx]=page;
+          whyEvict=`P${evicted} was selected by the random baseline`;
         }
         // Remove evicted from tracking
         const ei=fifoQ.indexOf(evicted); if(ei!==-1) fifoQ.splice(ei,1);
@@ -583,7 +634,7 @@ function runAlgo(refs, nF, algo){
     const li=lruOrder.indexOf(page); if(li!==-1) lruOrder.splice(li,1);
     lruOrder.push(page);
     // Update clock use bit on hit
-    if(hit && algo==='clock'){
+    if(hit && ['clock','nru','enhanced_clock','wsclock'].includes(algo)){
       const ci=frames.indexOf(page);
       if(ci!==-1) usebit[ci]=1;
     }
@@ -701,8 +752,8 @@ function renderFrames(step, nF){
   }
 
   // Clock
-  document.getElementById('clockWrap').style.display=currentAlgo==='clock'?'':'none';
-  if(currentAlgo==='clock'){
+  document.getElementById('clockWrap').style.display=['clock','nru','enhanced_clock','wsclock'].includes(currentAlgo)?'':'none';
+  if(['clock','nru','enhanced_clock','wsclock'].includes(currentAlgo)){
     document.getElementById('clockDisplay').innerHTML=step.frames.map((p,i)=>`
       <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
         <div style="font-size:.65rem;color:var(--muted)">F${i} ${i===step.clockPtr?'◀':''}</div>
@@ -836,7 +887,7 @@ document.getElementById('compareBtn').onclick=function(){
 function runComparison(){
   const refs=parseRefs();
   const nF=parseInt(document.getElementById('frameInput').value)||3;
-  const algos=['fifo','lru','lfu','optimal','clock'];
+  const algos=['fifo','lru','lfu','optimal','clock','mru','nru','enhanced_clock','working_set','wsclock','random'];
   const results=algos.map(a=>{
     const steps=runAlgo(refs,nF,a);
     const faults=steps[steps.length-1]?.faults||0;
@@ -844,7 +895,7 @@ function runComparison(){
   });
   const minF=Math.min(...results.map(r=>r.faults));
   const maxF=Math.max(...results.map(r=>r.faults));
-  const names={fifo:'FIFO',lru:'LRU',lfu:'LFU',optimal:'Optimal',clock:'2nd Chance'};
+  const names={fifo:'FIFO',lru:'LRU',lfu:'LFU',optimal:'Optimal',clock:'2nd Chance',mru:'MRU',nru:'NRU',enhanced_clock:'Enh Clock',working_set:'Working Set',wsclock:'WSClock',random:'Random'};
   document.getElementById('compArea').style.display='';
   document.getElementById('compGrid').innerHTML=results.map(r=>{
     const pct=maxF>0?(r.faults/maxF*100):0;
@@ -963,7 +1014,7 @@ document.getElementById('quizContinue').onclick=()=>{ document.getElementById('q
 // ── Summary ────────────────────────────────────────────
 function renderSummary(refs, nF, faults, hits){
   const hr=(hits/refs.length*100).toFixed(1);
-  const names={fifo:'FIFO',lru:'LRU',lfu:'LFU',optimal:'Optimal',clock:'Second Chance'};
+  const names={fifo:'FIFO',lru:'LRU',lfu:'LFU',optimal:'Optimal',clock:'Second Chance',mru:'MRU',nru:'NRU',enhanced_clock:'Enhanced Clock',working_set:'Working Set',wsclock:'WSClock',random:'Random'};
   const qual=faults/refs.length;
   let perf=qual<.2?'excellent':qual<.4?'good':qual<.6?'average':'poor';
   document.getElementById('summaryContent').innerHTML=`
