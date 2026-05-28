@@ -1505,3 +1505,343 @@ tr.drag-over { box-shadow: 0 -2px 0 0 var(--accent) inset; }
 @media print {
   .shortcuts-fab, .shortcuts-modal, .metrics-chart-panel { display: none !important; }
 }
+
+/* ============================================================
+   UI/CSS Enhancement Pack — MODs 1, 5, 6, 8, 11, 13, 14, 17,
+   26, 27, 28 + Utility Classes
+   ============================================================ */
+
+/* ── MOD 1: Collapsible Side Panels ── */
+.panel-collapse-btn {
+  position: absolute;
+  right: -1px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 36px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  color: var(--muted);
+  z-index: 10;
+  padding: 0;
+  transition: background 0.15s, color 0.15s;
+}
+.panel-collapse-btn:hover {
+  background: var(--blue-2);
+  color: var(--accent);
+}
+.info-panel .panel-collapse-btn {
+  right: auto;
+  left: -1px;
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+}
+.control-panel.collapsed {
+  width: 0;
+  padding: 0;
+  overflow: hidden;
+  transition: width 0.25s ease;
+}
+.info-panel.collapsed {
+  width: 0;
+  padding: 0;
+  overflow: hidden;
+  transition: width 0.25s ease;
+}
+.page-layout-3.left-collapsed {
+  grid-template-columns: 0 minmax(0, 1fr) 280px;
+}
+.page-layout-3.right-collapsed {
+  grid-template-columns: 300px minmax(0, 1fr) 0;
+}
+
+/* ── MOD 5: Full-Screen Viz Mode ── */
+.fullscreen-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  color: var(--muted);
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.fullscreen-btn:hover {
+  background: var(--blue-2);
+  color: var(--accent);
+  border-color: var(--blue-3);
+}
+.viz-panel.fullscreen-mode {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: var(--surface);
+  overflow-y: auto;
+  padding: 20px;
+}
+.viz-panel.fullscreen-mode ~ * {
+  display: none;
+}
+
+/* ── MOD 6: Persistent Panel Widths / Resize Handle ── */
+.panel-resize-handle {
+  position: absolute;
+  right: -3px;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 10;
+  transition: background 0.15s;
+}
+.panel-resize-handle:hover,
+.panel-resize-handle.dragging {
+  background: var(--accent);
+  opacity: 0.5;
+}
+
+/* ── MOD 8: Process Color Legend ── */
+.proc-color-legend {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 6px 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  font-size: 0.75rem;
+}
+.pcl-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.pcl-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+/* ── MOD 11: Metric Delta Indicators ── */
+.metric-delta {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  margin-top: 2px;
+}
+.metric-delta.better { color: var(--mem-color); }
+.metric-delta.worse  { color: var(--accent-2); }
+.metric-delta.same   { color: var(--muted); }
+
+/* ── MOD 13: Zoom +/- Buttons ── */
+.gantt-zoom-controls {
+  position: absolute;
+  top: 5px;
+  left: 8px;
+  display: flex;
+  gap: 3px;
+  z-index: 10;
+}
+.zoom-ctrl-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  font-size: 0.75rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+  transition: all 0.15s;
+}
+.zoom-ctrl-btn:hover {
+  background: var(--blue-2);
+  border-color: var(--blue-3);
+}
+
+/* ── MOD 14: Animated Metric Number Rollup ── */
+@keyframes metric-rollup {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+.metric-value.rollup { animation: metric-rollup 0.5s ease; }
+
+/* ── MOD 17: Full-Row Page Fault Flash ── */
+@keyframes row-fault-flash {
+  0%   { background: rgba(239, 108, 62, 0.35); }
+  100% { background: transparent; }
+}
+@keyframes row-hit-flash {
+  0%   { background: rgba(34, 160, 107, 0.35); }
+  100% { background: transparent; }
+}
+.frame-row-fault { animation: row-fault-flash 0.6s ease; }
+.frame-row-hit   { animation: row-hit-flash 0.6s ease; }
+
+/* ── MOD 26: Accessible Colorblind Mode Button (Prominent) ── */
+.colorblind-quick-btn {
+  position: fixed;
+  right: 62px;
+  top: 14px;
+  z-index: 200;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.colorblind-quick-btn.active {
+  background: #009e73;
+  color: #fff;
+  border-color: #007a5a;
+}
+
+/* ── MOD 27: ARIA Live Region ── */
+.aria-live-region {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* ── MOD 28: Reduced-Motion Safe Animations ── */
+@media (prefers-reduced-motion: reduce) {
+  .head-marker.moving       { animation: none !important; }
+  .frame-cell.fault         { animation: none !important; }
+  .page-slot.fault          { animation: none !important; }
+  .proc-row.state-running   { animation: none !important; }
+}
+
+/* ── Input History Dropdown ── */
+.input-history-wrap { position: relative; display: inline-block; }
+.input-history-btn {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; cursor: pointer; font-size: 0.8rem;
+  color: var(--muted); padding: 2px; line-height: 1;
+}
+.input-history-btn:hover { color: var(--accent); }
+.input-history-dropdown {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 300;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius-md); box-shadow: var(--shadow-md);
+  max-height: 160px; overflow-y: auto;
+}
+.input-history-item {
+  padding: 6px 10px; font-size: 0.78rem; cursor: pointer; color: var(--ink);
+  border-bottom: 1px solid var(--line); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.input-history-item:last-child { border-bottom: none; }
+.input-history-item:hover { background: var(--blue-2); }
+
+/* ── Seek Rate Input ── */
+.seek-rate-panel { font-size: 0.78rem; }
+.seek-time-display {
+  font-size: 0.72rem; color: var(--muted); margin-top: 4px; padding: 4px 8px;
+  background: var(--blue-1); border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+}
+
+/* ── SCAN Direction Toggle ── */
+.direction-toggle-group { display: flex; gap: 4px; }
+.direction-btn {
+  flex: 1; padding: 5px 8px; border-radius: var(--radius-sm);
+  border: 1px solid var(--line); font-size: 0.75rem; font-weight: 700;
+  cursor: pointer; background: var(--blue-1); color: var(--muted);
+  transition: all 0.15s; text-align: center;
+}
+.direction-btn.active {
+  background: var(--disk-color); color: #fff; border-color: #c04a1c;
+}
+
+/* ── Starvation Indicator (SSTF) ── */
+.starv-indicator {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px; border-radius: var(--radius-sm);
+  background: #fffbf0; border: 1px solid #d59a26;
+  font-size: 0.78rem; margin-bottom: 4px;
+}
+.starv-indicator strong { color: #5a3800; }
+
+/* ── Compaction Animation ── */
+@keyframes compact-slide {
+  0%   { transform: translateX(0);    opacity: 1; }
+  40%  { transform: translateX(-8px); opacity: 0.7; }
+  100% { transform: translateX(0);    opacity: 1; }
+}
+.mem-block.compacting { animation: compact-slide 0.6s ease; }
+
+/* ── Tie-Breaking Selector ── */
+.tie-break-select { font-size: 0.78rem; padding: 5px 8px; }
+
+/* ── Fragmentation Formula Tooltip ── */
+.frag-formula-reveal {
+  font-size: 0.72rem; color: var(--accent); cursor: pointer;
+  text-decoration: underline; text-decoration-style: dotted;
+}
+.frag-formula-box {
+  margin-top: 6px; padding: 8px 10px; background: var(--blue-1);
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  font-size: 0.72rem; font-family: monospace; color: var(--muted);
+  display: none;
+}
+.frag-formula-box.visible { display: block; }
+
+/* ── Next Fit Rover Pointer ── */
+.next-fit-rover {
+  position: absolute; left: -2px; top: 0; bottom: 0;
+  width: 3px; background: var(--disk-color); border-radius: 2px;
+  transition: top 0.4s ease;
+}
+.next-fit-rover-label {
+  position: absolute; left: 4px; font-size: 0.6rem; font-weight: 800;
+  color: var(--disk-color); white-space: nowrap;
+}
+
+/* ── Working Set Window ── */
+.working-set-window {
+  display: flex; gap: 3px; padding: 6px 10px;
+  background: var(--process-light); border: 1px solid var(--deadlock-light);
+  border-radius: var(--radius-sm); flex-wrap: wrap;
+}
+.ws-token {
+  padding: 2px 7px; border-radius: 10px; font-size: 0.72rem; font-weight: 700;
+  background: var(--panel); border: 1px solid var(--line);
+}
+.ws-token.in-window {
+  background: var(--process-light); border-color: var(--process-color);
+  color: var(--process-color);
+}
+.ws-token.out-of-window { opacity: 0.5; }
+
+/* ── Resource Request Panel (Deadlock) ── */
+.resource-request-panel {
+  background: var(--blue-1); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); padding: var(--space-4);
+}
+.request-result-safe   { color: var(--mem-color);  font-weight: 700; }
+.request-result-unsafe { color: var(--accent-2);   font-weight: 700; }

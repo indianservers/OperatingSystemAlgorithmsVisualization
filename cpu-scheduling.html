@@ -336,6 +336,52 @@ input[type=range].scrubber {
   color:var(--muted); font-size:.9rem;
 }
 
+/* ─── MOD 10: Proc row highlight-active ──────────────────── */
+.proc-row.highlight-active { background: rgba(34,160,107,0.15) !important; outline: 2px solid var(--mem-color); outline-offset: -1px; }
+
+/* ─── MOD 9: Gantt timeline ruler ────────────────────────── */
+.gantt-ruler {
+  display: flex; position: relative; margin-left: 32px;
+  height: 24px; margin-top: 2px;
+}
+.gantt-ruler-tick {
+  position: absolute; display: flex; flex-direction: column; align-items: center;
+  transform: translateX(-50%);
+}
+.gantt-ruler-tick .tick-line-major {
+  width: 1px; height: 10px; background: var(--muted); opacity: 0.7;
+}
+.gantt-ruler-tick .tick-line-minor {
+  width: 1px; height: 5px; background: var(--muted); opacity: 0.35;
+}
+.gantt-ruler-tick .tick-label {
+  font-size: 0.6rem; color: var(--muted); font-weight: 600;
+  margin-top: 1px; white-space: nowrap;
+}
+.gantt-ruler-baseline {
+  position: absolute; top: 0; left: 0; right: 0;
+  height: 1px; background: var(--muted); opacity: 0.25;
+}
+
+/* ─── MOD 15: Context switch marker improvements ─────────── */
+.ctx-switch-marker {
+  position: absolute; top: 0; bottom: 0; left: 0;
+  width: 2px; background: var(--accent-2);
+  z-index: 4;
+}
+.ctx-switch-marker::before {
+  content: '⚡'; position: absolute; top: -14px; left: 50%;
+  transform: translateX(-50%); font-size: 0.65rem;
+}
+
+/* ─── MOD 30: Tie-break select ───────────────────────────── */
+.tie-break-select {
+  padding: 5px 8px; border-radius: var(--radius-sm);
+  border: 1px solid var(--line); background: var(--panel);
+  color: var(--ink); font-size: 0.78rem; cursor: pointer;
+  margin-top: 4px;
+}
+
 /* ─── Responsive ──────────────────────────────────────── */
 @media(max-width:1200px) {
   .scheduler-layout { grid-template-columns: 280px minmax(0,1fr); }
@@ -419,6 +465,17 @@ input[type=range].scrubber {
   <!-- Algorithm description -->
   <div id="algoDesc" style="font-size:.78rem; color:var(--muted); line-height:1.5; padding:8px 10px; background:var(--blue-1); border:1px solid var(--line); border-radius:var(--radius-md)"></div>
 
+  <!-- MOD 30: Tie-Breaking Rule selector -->
+  <div id="tieBreakerOpt" style="font-size:0.78rem">
+    <div class="section-title">Tie-Breaking Rule</div>
+    <select id="tieBreakerSelect" class="tie-break-select w-full">
+      <option value="fcfs">Earlier arrival (FCFS)</option>
+      <option value="pid">Lower PID</option>
+      <option value="random">Random</option>
+    </select>
+    <div class="form-hint">Applied when two processes have equal priority metric</div>
+  </div>
+
   <!-- Process table -->
   <div>
     <div class="flex items-center justify-between" style="margin-bottom:6px">
@@ -457,8 +514,8 @@ input[type=range].scrubber {
     <div class="form-group">
       <label class="form-label">Time Quantum</label>
       <div style="display:flex; gap:8px; align-items:center">
-        <input type="range" id="quantumSlider" min="1" max="10" value="2" oninput="document.getElementById('quantumVal').textContent=this.value; document.getElementById('quantumInput').value=this.value">
-        <input type="number" id="quantumInput" value="2" min="1" max="20" style="width:54px" oninput="document.getElementById('quantumSlider').value=Math.min(10,+this.value); document.getElementById('quantumVal').textContent=this.value">
+        <input type="range" id="quantumSlider" min="1" max="10" value="2" oninput="document.getElementById('quantumVal').textContent=this.value; document.getElementById('quantumInput').value=this.value; validateQuantum();">
+        <input type="number" id="quantumInput" value="2" min="1" max="20" style="width:54px" oninput="document.getElementById('quantumSlider').value=Math.min(10,+this.value); document.getElementById('quantumVal').textContent=this.value; validateQuantum();">
       </div>
     </div>
   </div>
@@ -483,10 +540,10 @@ input[type=range].scrubber {
     <button class="btn btn-secondary" id="resetBtn" title="Reset">↺</button>
   </div>
 
-  <!-- Tie-breaking rules -->
+  <!-- Tie-breaking rules hint -->
   <div style="font-size:.72rem; color:var(--muted); padding:8px 10px; background:var(--blue-1); border:1px solid var(--line); border-radius:var(--radius-sm)">
     <strong style="color:var(--ink)">Tie-breaking rules:</strong>
-    1️⃣ Shorter/earlier metric &nbsp; 2️⃣ Earlier arrival time &nbsp; 3️⃣ Lower PID
+    Use the selector above to control tie-breaking when processes have equal scheduling metric.
   </div>
 </aside>
 
@@ -520,8 +577,15 @@ input[type=range].scrubber {
 
     <div class="gantt-scroll" id="ganttScroll">
       <div id="ganttInner" style="display:flex;flex-direction:column;gap:2px; min-width:fit-content">
-        <div style="color:var(--muted);font-size:.85rem;padding:20px 0;text-align:center">
-          Configure processes and click <strong>Simulate</strong>
+        <!-- MOD 16: Empty state -->
+        <div id="ganttEmptyState" style="text-align:center;padding:40px 20px;color:var(--muted)">
+          <div style="font-size:2.5rem;margin-bottom:12px;opacity:0.4">📊</div>
+          <div style="font-size:0.95rem;font-weight:700;color:var(--ink);margin-bottom:6px">No simulation running</div>
+          <div style="font-size:0.82rem">Configure processes above and click <strong>Simulate</strong> to see the Gantt chart</div>
+          <div style="margin-top:12px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+            <button class="btn btn-secondary btn-sm" data-preset="simple">Load Simple Example</button>
+            <button class="btn btn-secondary btn-sm" data-preset="starve">Load Starvation Example</button>
+          </div>
         </div>
       </div>
     </div>
@@ -571,7 +635,7 @@ input[type=range].scrubber {
         <div class="formula-row"><span class="formula-name">CT</span> <span class="formula-eq">= Time when process finishes executing</span></div>
         <div class="formula-row"><span class="formula-name">TAT</span> <span class="formula-eq">= CT − Arrival Time</span></div>
         <div class="formula-row"><span class="formula-name">WT</span> <span class="formula-eq">= TAT − Burst Time (= time in ready queue)</span></div>
-        <div class="formula-row"><span class="formula-name">RT</span> <span class="formula-eq">= First CPU time − Arrival Time</span></div>
+        <div class="formula-row"><span class="formula-name">RT</span> <span class="formula-eq">= First CPU start − Arrival Time (≠ WT for preemptive algos)</span></div>
       </div>
       <div class="table-wrap mt-3">
         <table>
@@ -630,6 +694,9 @@ input[type=range].scrubber {
 
   <div id="starvInfoBox" style="display:none">
     <div class="section-title">⚠ Starvation Warnings</div>
+    <div id="starvBanner" style="background:#fef3c7;border:1px solid #d59a26;border-radius:var(--radius-sm);padding:6px 10px;margin-bottom:6px;font-size:.78rem;font-weight:700;color:#7c4a00;display:none">
+      ⚠ Starvation Risk Detected
+    </div>
     <div id="starvLog" style="font-size:.75rem;color:var(--accent-3)"></div>
   </div>
 
@@ -795,6 +862,8 @@ function updateProc(i, field, el) {
   if (field==='burst' && (isNaN(val)||val<1)) { el.classList.add('invalid-field'); return; }
   if (field==='arrival' && (isNaN(val)||val<0)) { el.classList.add('invalid-field'); return; }
   processes[i][field] = isNaN(val)?0:val;
+  // MOD 32: revalidate quantum when burst changes
+  if(field==='burst') validateQuantum();
 }
 
 function removeProc(i) { if(processes.length>1){processes.splice(i,1);renderTable();} }
@@ -840,6 +909,22 @@ function simulate(inputProcs, algo, opts={}) {
   const quantum = parseInt(opts.quantum)||2;
   const agingEnabled = opts.aging||false;
   const agingInterval = parseInt(opts.agingInterval)||5;
+  // MOD 30: Tie-breaking policy
+  const tieBreakerPolicy = (typeof opts.tieBreaker === 'string') ? opts.tieBreaker :
+    (document.getElementById('tieBreakerSelect')?.value || 'fcfs');
+
+  // Helper: apply tie-breaking comparator suffix
+  let _tbSeed = 42;
+  function tbCompare(a, b) {
+    if (tieBreakerPolicy === 'pid') return a.pid - b.pid;
+    if (tieBreakerPolicy === 'random') {
+      // seeded deterministic shuffle based on pids
+      _tbSeed = (_tbSeed * 1664525 + 1013904223) & 0xffffffff;
+      return ((_tbSeed >>> 1) % 2) ? 1 : -1;
+    }
+    // default 'fcfs': arrival then pid
+    return (a.arrival - b.arrival) || (a.pid - b.pid);
+  }
 
   const n = inputProcs.length;
   if (!n) return [];
@@ -931,10 +1016,10 @@ function simulate(inputProcs, algo, opts={}) {
     else if(algo==='fcfs'){
       if(runningPid===null){
         const ready=getReady(procs,completed,t);
-        ready.sort((a,b)=>a.arrival-b.arrival||a.pid-b.pid);
+        ready.sort((a,b)=>{ const d=a.arrival-b.arrival; return d!==0?d:tbCompare(a,b); });
         if(ready.length>0){
           const sel=ready[0];
-          reason=makeFCFSReason(sel, ready, t);
+          reason=makeFCFSReason(sel, ready, t, tieBreakerPolicy);
           reasonType='select'; isNewDecision=true;
           runningPid=sel.pid;
           if(sel.startTime===-1) sel.startTime=t;
@@ -945,10 +1030,10 @@ function simulate(inputProcs, algo, opts={}) {
     else if(algo==='sjf'){
       if(runningPid===null){
         const ready=getReady(procs,completed,t);
-        ready.sort((a,b)=>a.burst-b.burst||a.arrival-b.arrival||a.pid-b.pid);
+        ready.sort((a,b)=>{ const d=a.burst-b.burst; return d!==0?d:tbCompare(a,b); });
         if(ready.length>0){
           const sel=ready[0];
-          reason=makeSJFReason(sel, ready);
+          reason=makeSJFReason(sel, ready, tieBreakerPolicy);
           reasonType='select'; isNewDecision=true;
           runningPid=sel.pid;
           if(sel.startTime===-1) sel.startTime=t;
@@ -960,7 +1045,7 @@ function simulate(inputProcs, algo, opts={}) {
       // Preemptive: at every tick check if a shorter process is available
       const ready=getReady(procs,completed,t);
       if(runningPid!==null) ready.push(byPid[runningPid]); // include running
-      ready.sort((a,b)=>a.rem-b.rem||a.arrival-b.arrival||a.pid-b.pid);
+      ready.sort((a,b)=>{ const d=a.rem-b.rem; return d!==0?d:tbCompare(a,b); });
       const best = ready.length>0 ? ready[0] : null;
       if(best && best.pid!==runningPid){
         const oldRun=runningPid;
@@ -968,7 +1053,8 @@ function simulate(inputProcs, algo, opts={}) {
         if(best.startTime===-1) best.startTime=t;
         isNewDecision=true;
         if(oldRun!==null){
-          reason=`P${runningPid} preempts P${oldRun}: rem=${best.rem} < P${oldRun} rem=${byPid[oldRun].rem}`;
+          // MOD 33: Include both remaining times in preemption reason
+          reason=`P${runningPid} preempts P${oldRun} at t=${t}: rem(P${runningPid})=${best.rem} < rem(P${oldRun})=${byPid[oldRun].rem} — context switch [tie-break:${tieBreakerPolicy}]`;
           reasonType='preempt';
         } else {
           reason=makeSRTFSelectReason(best, ready.filter(x=>x.pid!==best.pid));
@@ -998,10 +1084,10 @@ function simulate(inputProcs, algo, opts={}) {
       }
       if(runningPid===null){
         const ready=getReady(procs,completed,t);
-        ready.sort((a,b)=>effectivePri[a.pid]-effectivePri[b.pid]||a.arrival-b.arrival||a.pid-b.pid);
+        ready.sort((a,b)=>{ const d=effectivePri[a.pid]-effectivePri[b.pid]; return d!==0?d:tbCompare(a,b); });
         if(ready.length>0){
           const sel=ready[0];
-          reason=makePriNPReason(sel, ready, effectivePri);
+          reason=makePriNPReason(sel, ready, effectivePri, tieBreakerPolicy);
           reasonType='select'; isNewDecision=true;
           runningPid=sel.pid;
           if(sel.startTime===-1) sel.startTime=t;
@@ -1030,7 +1116,7 @@ function simulate(inputProcs, algo, opts={}) {
       // Preemptive priority
       const ready=getReady(procs,completed,t);
       if(runningPid!==null) ready.push(byPid[runningPid]);
-      ready.sort((a,b)=>effectivePri[a.pid]-effectivePri[b.pid]||a.arrival-b.arrival||a.pid-b.pid);
+      ready.sort((a,b)=>{ const d=effectivePri[a.pid]-effectivePri[b.pid]; return d!==0?d:tbCompare(a,b); });
       const best=ready.length>0?ready[0]:null;
       if(best && best.pid!==runningPid){
         const oldRun=runningPid;
@@ -1041,7 +1127,7 @@ function simulate(inputProcs, algo, opts={}) {
           reason=`P${runningPid} preempts P${oldRun}: pri(eff)=${effectivePri[best.pid]} < ${effectivePri[oldRun]}`;
           reasonType='preempt';
         } else {
-          reason=makePriNPReason(best, ready.filter(x=>x.pid!==best.pid), effectivePri);
+          reason=makePriNPReason(best, ready.filter(x=>x.pid!==best.pid), effectivePri, tieBreakerPolicy);
           reasonType='select';
         }
         if(oldRun!==runningPid){ contextSwitches++; ctxSwitch=true; }
@@ -1119,7 +1205,9 @@ function simulate(inputProcs, algo, opts={}) {
         if(!waitStart[p.pid]||waitStart[p.pid]===-1) waitStart[p.pid]=t;
         totalWaited[p.pid]=(totalWaited[p.pid]||0)+1;
         waitTimes[p.pid]=totalWaited[p.pid];
-        if(totalWaited[p.pid]>=starvThresh && algo.startsWith('priority')) starvWarnings.push(p.pid);
+        if(totalWaited[p.pid]>=starvThresh && algo.startsWith('priority')){
+          starvWarnings.push({pid:p.pid, waited:totalWaited[p.pid], avgBurst});
+        }
       } else {
         waitStart[p.pid]=-1;
       }
@@ -1150,7 +1238,7 @@ function simulate(inputProcs, algo, opts={}) {
       processStates: procStates,
       effectivePriority: {...effectivePri},
       waitTimes,
-      starvWarnings:[...starvWarnings],
+      starvWarnings:[...starvWarnings], // each entry: {pid, waited, avgBurst} or number for backwards compat
       rrQuantumLeft: algo==='rr'?rrQuantumLeft:0,
       rrReQueuedPid,
       contextSwitches,
@@ -1210,30 +1298,31 @@ function getReadyDisplayQueue(procs, completed, runningPid, t, algo, rrQueue, ef
 }
 
 // Reason builders
-function makeFCFSReason(sel, ready, t) {
+// MOD 30: include tie-breaking policy in reason string when ties occur
+function makeFCFSReason(sel, ready, t, tb) {
   if(ready.length===1) return `P${sel.pid} is the only ready process (arrived t=${sel.arrival})`;
   const tie = ready.filter(r=>r.arrival===sel.arrival);
   let r=`P${sel.pid} selected — arrived earliest (t=${sel.arrival})`;
-  if(tie.length>1) r+=` — tie broken by PID (P${sel.pid} < P${tie[1].pid})`;
+  if(tie.length>1) r+=` — tie broken by ${tb||'fcfs'} rule (P${sel.pid} wins)`;
   return r;
 }
-function makeSJFReason(sel, ready) {
+function makeSJFReason(sel, ready, tb) {
   if(ready.length===1) return `P${sel.pid} is the only ready process (burst=${sel.burst})`;
   const tie = ready.filter(r=>r.burst===sel.burst);
   let r=`P${sel.pid} has shortest burst (${sel.burst} units)`;
   if(ready.length>1) r+=` among ${ready.length} ready: [${ready.map(r=>`P${r.pid}:${r.burst}`).join(', ')}]`;
-  if(tie.length>1) r+=` — tie broken by arrival time`;
+  if(tie.length>1) r+=` — tie broken by ${tb||'fcfs'} rule`;
   return r;
 }
 function makeSRTFSelectReason(sel, others) {
   if(!others.length) return `P${sel.pid} is the only ready process (rem=${sel.rem})`;
   return `P${sel.pid} selected: shortest remaining (${sel.rem}) among ready [${[sel,...others].map(r=>`P${r.pid}:${r.rem}`).join(', ')}]`;
 }
-function makePriNPReason(sel, ready, ep) {
+function makePriNPReason(sel, ready, ep, tb) {
   const allInfo = [sel,...ready].map(r=>`P${r.pid}:pri${ep[r.pid]}`).join(', ');
   let r=`P${sel.pid} selected: highest priority (${ep[sel.pid]})`;
   if(ready.length>0) r+=` among [${allInfo}]`;
-  if(ready.length>0 && ep[sel.pid]===ep[ready[0]?.pid]) r+=` — tie broken by arrival time`;
+  if(ready.length>0 && ep[sel.pid]===ep[ready[0]?.pid]) r+=` — tie broken by ${tb||'fcfs'} rule`;
   return r;
 }
 
@@ -1245,20 +1334,20 @@ function computeMetrics(procs, tl) {
   const results = procs.map(p=>{
     // Find completion time from timeline
     let ct=-1, st=-1;
+    // MOD 31: find FIRST tick where this process ran (for correct RT in preemptive algos)
     for(const tick of tl){
-      if(tick.startTimes[p.pid]!==-1 && st===-1) st=tick.startTimes[p.pid];
-      if(tick.completionTimes && tick.completionTimes[p.pid]) ct=tick.completionTimes[p.pid];
-    }
-    // Use completion time from last tick if available
-    const lastCt = last.completionTimes?.[p.pid];
-    if(lastCt) ct=lastCt;
-    // Try to find from all ticks
-    for(const tick of tl){
+      if(st===-1 && tick.running===p.pid) st=tick.t; // first CPU tick
       if(tick.completionTimes?.[p.pid]) ct=tick.completionTimes[p.pid];
+    }
+    // Fallback: use startTimes from simulation if direct tick scan returns nothing
+    if(st===-1){
+      for(const tick of tl){
+        if(tick.startTimes[p.pid]!==-1 && st===-1) st=tick.startTimes[p.pid];
+      }
     }
     const tat = ct>=0 ? ct-p.arrival : -1;
     const wt = tat>=0 ? tat-p.burst : -1;
-    const rt = st>=0 ? st-p.arrival : -1;
+    const rt = st>=0 ? st-p.arrival : -1; // RT = first CPU time - arrival
     return {pid:p.pid,arrival:p.arrival,burst:p.burst,color:p.color,ct,tat,wt,rt};
   });
   return results;
@@ -1272,18 +1361,22 @@ function buildGanttCells(tl, upToTick) {
   const tickW = 24;
   const ganttInner = document.getElementById('ganttInner');
 
+  // MOD 16: hide empty state when simulation runs
+  const emptyState = document.getElementById('ganttEmptyState');
+  if(emptyState) emptyState.style.display = 'none';
+
   // Per-process rows
   const rows = {};
   processes.forEach(p => rows[p.pid]=[]);
 
-  let prevPid = null;
   for(let t=0; t<Math.min(upToTick, tl.length); t++){
     const tick = tl[t];
     processes.forEach(p=>{
       const running = tick.running===p.pid;
       rows[p.pid].push({
         t, running,
-        ctxSwitch: tick.ctxSwitch && tick.running===p.pid && t>0,
+        // MOD 15: ctx switch at LEFT edge of running cell where ctxSwitch===true
+        ctxSwitch: tick.ctxSwitch && tick.running===p.pid,
       });
     });
   }
@@ -1316,11 +1409,11 @@ function buildGanttCells(tl, upToTick) {
     const cells = rows[p.pid].map(c=>{
       const isCurrent = c.t===upToTick-1;
       if(c.running){
+        // MOD 15: ctx-switch-marker at left edge (via CSS position:absolute; left:0)
         return `<div class="gantt-cell ${isCurrent?'current-tick':''}" style="background:${p.color}; min-width:${tickW}px" title="P${p.pid} runs at t=${c.t}→${c.t+1}">
-          ${c.ctxSwitch?'<div class="ctx-switch-marker" title="Context switch"></div>':''}
+          ${c.ctxSwitch?'<div class="ctx-switch-marker" title="Context switch — ⚡"></div>':''}
         </div>`;
       } else {
-        // Check if this proc is idle (not running but arrived)
         const arrivedByT = p.arrival<=c.t;
         if(!arrivedByT) return `<div class="gantt-cell" style="background:var(--surface);border-color:var(--surface); min-width:${tickW}px"></div>`;
         return `<div class="gantt-cell" style="background:var(--surface);border-color:var(--surface); min-width:${tickW}px"></div>`;
@@ -1332,7 +1425,7 @@ function buildGanttCells(tl, upToTick) {
     </div>`;
   });
 
-  // CPU/Idle row
+  // CPU/Idle row — MOD 12: ensure idle cells have .idle class + title="CPU Idle" + em-dash text
   let cpuRow = `<div class="gantt-main-row">
     <div class="gantt-row-label" style="background:#8899aa;font-size:.6rem">CPU</div>
     <div class="gantt-cells">`;
@@ -1342,24 +1435,42 @@ function buildGanttCells(tl, upToTick) {
     if(tick.running!==null){
       const p=processes.find(x=>x.pid===tick.running);
       const color=p?p.color:'#1673c7';
-      cpuRow+=`<div class="gantt-cell ${isCurrent?'current-tick':''}" style="background:${color};min-width:${tickW}px" title="P${tick.running} at t=${t}" >
-        ${tick.ctxSwitch?'<div class="ctx-switch-marker"></div>':''}
+      // MOD 15: ctx-switch-marker at left edge of cell
+      cpuRow+=`<div class="gantt-cell ${isCurrent?'current-tick':''}" style="background:${color};min-width:${tickW}px" title="P${tick.running} at t=${t}→${t+1}">
+        ${tick.ctxSwitch?'<div class="ctx-switch-marker" title="Context switch"></div>':''}
       </div>`;
     } else {
-      cpuRow+=`<div class="gantt-cell idle ${isCurrent?'current-tick':''}" style="min-width:${tickW}px" title="CPU idle at t=${t}"></div>`;
+      // MOD 12: idle cell with cross-hatch, title="CPU Idle", em-dash
+      cpuRow+=`<div class="gantt-cell idle ${isCurrent?'current-tick':''}" style="min-width:${tickW}px" title="CPU Idle">—</div>`;
     }
   }
   cpuRow+='</div></div>';
 
-  // Timeline ticks
-  let tickHtml=`<div class="gantt-timeline" style="padding-left:${32+tickW}px; min-width:${maxT2*tickW}px">`;
-  const step = maxT2<=20?1:maxT2<=50?5:10;
-  for(let t=0;t<=Math.min(upToTick,tl.length);t+=step){
-    tickHtml+=`<div class="t-label" style="position:relative;left:${(t-step)*tickW}px">${t}</div>`;
+  // MOD 9: Enhanced timeline ruler with major (every 5) and minor (every 1) tick marks
+  const totalT = Math.min(upToTick, tl.length);
+  let rulerHtml = `<div class="gantt-ruler" style="min-width:${totalT*tickW+8}px">`;
+  rulerHtml += `<div class="gantt-ruler-baseline" style="width:${totalT*tickW}px"></div>`;
+  for(let t=0; t<=totalT; t++){
+    const isMajor = t % 5 === 0;
+    const x = t * tickW;
+    rulerHtml += `<div class="gantt-ruler-tick" style="left:${x}px">
+      <div class="${isMajor?'tick-line-major':'tick-line-minor'}"></div>
+      ${isMajor ? `<div class="tick-label">${t}</div>` : ''}
+    </div>`;
   }
-  tickHtml+='</div>';
+  rulerHtml += '</div>';
 
-  ganttInner.innerHTML = arrivalHtml + rowsHtml + cpuRow + tickHtml;
+  ganttInner.innerHTML = arrivalHtml + rowsHtml + cpuRow + rulerHtml;
+
+  // MOD 10: highlight running process row in proc table
+  // Remove highlight from all rows first
+  document.querySelectorAll('.proc-row').forEach(row => row.classList.remove('highlight-active'));
+  // Find which process is currently running at the current tick
+  const currentTickData = tl[Math.max(0, upToTick-1)];
+  if(currentTickData && currentTickData.running !== null){
+    const runningRow = document.getElementById(`row-${currentTickData.running}`);
+    if(runningRow) runningRow.classList.add('highlight-active');
+  }
 
   // Legend
   const leg=document.getElementById('legendRow');
@@ -1407,7 +1518,7 @@ function updateProcessStates(tick) {
     const st=tick.processStates[p.pid]||'not_arrived';
     const stLabel={'not_arrived':'Not Arrived','ready':'Ready','running':'Running','completed':'Completed'};
     const sbClass={'not_arrived':'sb-not-arrived','ready':'sb-ready','running':'sb-running','completed':'sb-done'};
-    const starvWarn = tick.starvWarnings?.includes(p.pid);
+    const starvWarn = tick.starvWarnings?.some(s=>(typeof s==='object'?s.pid:s)===p.pid);
     const rem = tick.remaining?.[p.pid]??p.burst;
     const effPri = tick.effectivePriority?.[p.pid];
     const priStr = (currentAlgo.startsWith('priority') && effPri!=null) ?
@@ -1433,7 +1544,10 @@ function updateDecisionBox(tick) {
   html+=`<div>${tick.reason||'(No change)'}</div>`;
   if(tick.arriving.length) html+=`<div style="color:var(--accent-3);font-size:.75rem;margin-top:4px">⤵ Arriving: ${tick.arriving.map(id=>`P${id}`).join(', ')}</div>`;
   if(tick.completing.length) html+=`<div style="color:var(--mem-color);font-size:.75rem;margin-top:2px">✓ Completed: ${tick.completing.map(id=>`P${id}`).join(', ')}</div>`;
-  if(tick.starvWarnings?.length) html+=`<div style="color:#d59a26;font-size:.75rem;margin-top:4px">⚠ Starvation risk: ${tick.starvWarnings.map(id=>`P${id}`).join(', ')}</div>`;
+  if(tick.starvWarnings?.length) {
+    const starvPids = tick.starvWarnings.map(s=>(typeof s==='object')?`P${s.pid}(waited:${s.waited})`:(`P${s}`));
+    html+=`<div style="color:#d59a26;font-size:.75rem;margin-top:4px">⚠ Starvation risk: ${starvPids.join(', ')}</div>`;
+  }
   box.innerHTML=html;
 }
 
@@ -1441,10 +1555,15 @@ function buildDecisionLog(tl) {
   const log=document.getElementById('decisionLog');
   const entries=tl.filter(t=>t.reasonType!=='continue'||t.arriving.length||t.completing.length);
   log.innerHTML=entries.map((tick,i)=>{
-    return `<div class="dec-entry type-${tick.reasonType}" id="de-${tick.t}">
+    const preemptAttr = tick.reasonType==='preempt' ? ` data-preempt-t="${tick.t}"` : '';
+    // MOD 29: show starvation entries in log
+    const starvHtml = tick.starvWarnings?.length ?
+      `<div class="dec-reason" style="color:#d59a26">⚠ Starvation risk: ${tick.starvWarnings.map(s=>(typeof s==='object')?`P${s.pid} waited ${s.waited} ticks (avg burst ${s.avgBurst.toFixed(1)})`:(`P${s}`)).join(', ')}</div>` : '';
+    return `<div class="dec-entry type-${tick.reasonType}" id="de-${tick.t}"${preemptAttr}>
       <span class="dec-time">t=${tick.t}</span>${tick.reason||'continuing'}
       ${tick.arriving.length?`<div class="dec-reason">⤵ +${tick.arriving.map(id=>`P${id}`).join(',')}</div>`:''}
       ${tick.completing.length?`<div class="dec-reason">✓ done: ${tick.completing.map(id=>`P${id}`).join(',')}</div>`:''}
+      ${starvHtml}
     </div>`;
   }).join('');
 }
@@ -1459,14 +1578,19 @@ function updateLiveStats(tl, upTo) {
   const totalTicks=upTo;
   const busyTicks=active.filter(t=>t.running!==null).length;
   const idleTicks=totalTicks-busyTicks;
-  const done=active[upTo-1]?.completionTimes?active[upTo-1].completionTimes:{};
   const completedCount=active[upTo-1]?Object.values(active[upTo-1].processStates).filter(s=>s==='completed').length:0;
   const ctxSw=active[upTo-1]?.contextSwitches??0;
-  const util=totalTicks>0?((busyTicks/totalTicks)*100).toFixed(1):'—';
-  document.getElementById('statCtx').textContent=ctxSw;
-  document.getElementById('statUtil').textContent=util+'%';
+  const utilPct=totalTicks>0?((busyTicks/totalTicks)*100):0;
+  const utilStr=totalTicks>0?utilPct.toFixed(1)+'%':'—';
+  // MOD 34: color-coded utilization
+  const utilColor = utilPct>80?'var(--mem-color)':utilPct>50?'var(--accent-3)':'var(--disk-color)';
+  // MOD 15: context switch count prominent
+  document.getElementById('statCtx').innerHTML=`<strong style="color:${ctxSw>0?'var(--accent-2)':'var(--muted)'}">${ctxSw}</strong>`;
+  document.getElementById('statUtil').innerHTML=`<span style="color:${utilColor};font-weight:700">${utilStr}</span>`;
   document.getElementById('statThru').textContent=completedCount+` proc/${totalTicks} ticks`;
-  document.getElementById('statIdle').textContent=idleTicks+` ticks`;
+  // MOD 34: idle time as ticks and percentage
+  const idlePct=totalTicks>0?((idleTicks/totalTicks)*100).toFixed(1):'0.0';
+  document.getElementById('statIdle').textContent=`${idleTicks} ticks (${idlePct}%)`;
   if(ctxSw>0) document.getElementById('ctxLegend').style.display='';
 }
 
@@ -1476,24 +1600,34 @@ function renderMetrics(procs, tl) {
   const avgWT=(metrics.reduce((s,m)=>s+(m.wt>=0?m.wt:0),0)/metrics.length).toFixed(2);
   const avgTAT=(metrics.reduce((s,m)=>s+(m.tat>=0?m.tat:0),0)/metrics.length).toFixed(2);
   const avgRT=(metrics.reduce((s,m)=>s+(m.rt>=0?m.rt:0),0)/metrics.length).toFixed(2);
-  const busyTicks=tl.filter(t=>t.running!==null).length;
-  const util=((busyTicks/tl.length)*100).toFixed(1);
+  // MOD 34: count idle ticks for utilization
+  const idleTicks=tl.filter(t=>t.running===null).length;
+  const utilPct=tl.length>0?((tl.length-idleTicks)/tl.length*100):0;
+  const util=utilPct.toFixed(1);
+  const utilColor = utilPct>80?'var(--mem-color)':utilPct>50?'var(--accent-3)':'var(--disk-color)';
 
   grid.innerHTML=`
     <div class="metric-card"><div class="metric-value" style="color:var(--cpu-color)">${avgWT}</div><div class="metric-label">Avg WT</div></div>
     <div class="metric-card"><div class="metric-value" style="color:var(--mem-color)">${avgTAT}</div><div class="metric-label">Avg TAT</div></div>
     <div class="metric-card"><div class="metric-value" style="color:var(--disk-color)">${avgRT}</div><div class="metric-label">Avg RT</div></div>
-    <div class="metric-card"><div class="metric-value" style="color:var(--deadlock-color)">${util}%</div><div class="metric-label">CPU Util</div></div>
+    <div class="metric-card">
+      <div class="metric-value" style="color:${utilColor}">${util}%</div>
+      <div class="metric-label">CPU Util</div>
+      <div style="height:4px;border-radius:2px;background:var(--line);overflow:hidden;margin-top:4px">
+        <div style="height:100%;width:${util}%;background:${utilColor};border-radius:2px;transition:width .4s"></div>
+      </div>
+    </div>
   `;
 
   const body=document.getElementById('metricsBody');
+  // MOD 31: RT tooltip clarifies it's FIRST cpu start - arrival
   body.innerHTML=metrics.map(m=>`<tr>
     <td><span class="state-chip" style="background:${m.color};width:24px;height:24px;font-size:.62rem">P${m.pid}</span></td>
     <td>${m.arrival}</td><td>${m.burst}</td>
     <td><strong>${m.ct>=0?m.ct:'—'}</strong></td>
     <td title="TAT = CT(${m.ct}) − Arrival(${m.arrival})">${m.tat>=0?`<strong>${m.tat}</strong>`:'-'}</td>
     <td title="WT = TAT(${m.tat}) − Burst(${m.burst})" style="color:var(--cpu-color)">${m.wt>=0?`<strong>${m.wt}</strong>`:'-'}</td>
-    <td>${m.rt>=0?m.rt:'—'}</td>
+    <td title="RT = First CPU start − Arrival(${m.arrival})">${m.rt>=0?m.rt:'—'}</td>
   </tr>`).join('');
 
   const foot=document.getElementById('metricsFoot');
@@ -1542,6 +1676,34 @@ function run() {
     ).join('<br>');
   }
 
+  // MOD 29: Show starvation warnings with enhanced detail
+  const allStarvPids = new Set();
+  const starvDetails = {};
+  timeline.forEach(tick=>{
+    (tick.starvWarnings||[]).forEach(s=>{
+      const pid = typeof s==='object' ? s.pid : s;
+      allStarvPids.add(pid);
+      if(typeof s==='object' && (!starvDetails[pid] || starvDetails[pid].waited < s.waited)){
+        starvDetails[pid] = s;
+      }
+    });
+  });
+  if(allStarvPids.size > 0){
+    document.getElementById('starvInfoBox').style.display='';
+    document.getElementById('starvBanner').style.display='';
+    const avgWTAll = timeline.length > 0 ? timeline.reduce((s,t)=>s+(t.running!==null?0:1),0) : 0;
+    document.getElementById('starvLog').innerHTML = [...allStarvPids].map(pid=>{
+      const det = starvDetails[pid];
+      const p = processes.find(x=>x.pid===pid);
+      const chip = p ? `<span style="display:inline-block;width:18px;height:18px;border-radius:50%;background:${p.color};color:#fff;font-size:.6rem;font-weight:800;text-align:center;line-height:18px">P${pid}</span>` : `P${pid}`;
+      return `<div style="margin-bottom:4px;padding:4px 6px;border:1px solid #d59a26;border-radius:4px;background:#fffbf0">
+        ${chip} <strong>P${pid}</strong>
+        ${det ? ` waited <strong>${det.waited}</strong> ticks (avg burst: ${det.avgBurst.toFixed(1)})` : ''}
+        <span style="color:#9a3700;margin-left:4px">⚠ Starvation Risk</span>
+      </div>`;
+    }).join('');
+  }
+
   // Comparison
   if(compareMode) runComparison();
 }
@@ -1555,6 +1717,8 @@ function updateAtTick(t) {
   scrollLogToTick(tick?.t);
   updateLiveStats(timeline, t);
   renderTable(tick?.processStates);
+  // MOD 29: update starvation badges on proc rows
+  updateStarvBadges(tick);
   document.getElementById('tickLabel').textContent = `t = ${t}`;
   document.getElementById('stepCounter').textContent = `t=${t}`;
   document.getElementById('scrubber').value = t;
@@ -1580,7 +1744,15 @@ function validateInput() {
 
 function resetViz() {
   stopPlay(); timeline=[]; currentTick=0;
-  document.getElementById('ganttInner').innerHTML='<div style="color:var(--muted);font-size:.85rem;padding:20px 0;text-align:center">Configure processes and click <strong>Simulate</strong></div>';
+  // MOD 16: show empty state
+  const emptyState = document.getElementById('ganttEmptyState');
+  if(emptyState) emptyState.style.display = '';
+  // Clear ganttInner content except empty state
+  const ganttInner = document.getElementById('ganttInner');
+  // Remove everything except the empty state div
+  Array.from(ganttInner.children).forEach(child=>{
+    if(child.id !== 'ganttEmptyState') child.remove();
+  });
   document.getElementById('playbackBar').style.display='none';
   document.getElementById('scrubberWrap').style.display='none';
   document.getElementById('decLogArea').style.display='none';
@@ -1593,6 +1765,11 @@ function resetViz() {
   document.getElementById('legendRow').innerHTML='';
   document.getElementById('agingInfoBox').style.display='none';
   document.getElementById('starvInfoBox').style.display='none';
+  // MOD 29: hide starvation banner
+  const banner = document.getElementById('starvBanner');
+  if(banner) banner.style.display='none';
+  // Remove proc row highlights
+  document.querySelectorAll('.proc-row').forEach(row=>row.classList.remove('highlight-active'));
   ['statCtx','statUtil','statThru','statIdle'].forEach(id=>document.getElementById(id).textContent='—');
 }
 
@@ -1856,6 +2033,61 @@ document.getElementById('randomBtn').onclick=()=>{
   }
   resetViz(); renderTable();
 };
+
+// ══════════════════════════════════════════════════════════
+// MOD 32: Round Robin quantum guard
+// ══════════════════════════════════════════════════════════
+function validateQuantum() {
+  const q = parseInt(document.getElementById('quantumInput').value) || 0;
+  if(!processes.length) return;
+  const maxBurst = Math.max(...processes.map(p => p.burst));
+  const quantumOpt = document.getElementById('quantumOpt');
+  if(!quantumOpt) return;
+  // Find or create hint element
+  let hint = quantumOpt.querySelector('.quantum-hint');
+  if(!hint){
+    hint = document.createElement('div');
+    hint.className = 'form-hint quantum-hint';
+    quantumOpt.appendChild(hint);
+  }
+  if (q <= 0) {
+    hint.style.color = 'var(--accent-2)';
+    hint.textContent = '⚠ Quantum must be ≥ 1';
+  } else if (q >= maxBurst) {
+    hint.style.color = 'var(--accent-3)';
+    hint.textContent = `⚠ Quantum (${q}) ≥ max burst (${maxBurst}) — degenerates to FCFS`;
+  } else {
+    hint.style.color = '';
+    hint.textContent = '';
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// MOD 29: Update proc row starvation badges
+// ══════════════════════════════════════════════════════════
+function updateStarvBadges(tick) {
+  if(!tick) return;
+  const starvPids = new Set((tick.starvWarnings||[]).map(s=>(typeof s==='object'?s.pid:s)));
+  processes.forEach(p=>{
+    const row = document.getElementById(`row-${p.pid}`);
+    if(!row) return;
+    // remove existing badge
+    const existing = row.querySelector('.proc-starv-badge');
+    if(existing) existing.remove();
+    if(starvPids.has(p.pid)){
+      // find the PID cell (2nd td)
+      const pidCell = row.cells[1];
+      if(pidCell){
+        const badge = document.createElement('span');
+        badge.className = 'proc-starv-badge';
+        badge.title = 'Starvation risk';
+        badge.style.cssText = 'font-size:.65rem;margin-left:2px;vertical-align:middle;cursor:help';
+        badge.textContent = '⚠';
+        pidCell.appendChild(badge);
+      }
+    }
+  });
+}
 
 // ══════════════════════════════════════════════════════════
 // INIT

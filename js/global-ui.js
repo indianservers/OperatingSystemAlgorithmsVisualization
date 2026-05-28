@@ -65,6 +65,9 @@
   /* Feature 16 – Metrics comparison store */
   let _metricsStore = {};
 
+  /* MOD 11 – Previous metrics for delta indicators */
+  let _prevMetrics = {};
+
   /* ── Helpers ───────────────────────────────────────── */
   function pageName() {
     return location.pathname.split('/').pop() || 'index.html';
@@ -336,7 +339,7 @@
     }, 800);
   }
 
-  /* ── Global Scrubber / Speed (Features 6 & 7) ─────── */
+  /* ── Global Scrubber / Speed (Features 6 & 7) — MOD 2 & MOD 3 ── */
   function initGlobalScrubber() {
     if (document.getElementById('globalTimeline')) return;
     const bar = el('div', 'global-timeline');
@@ -344,6 +347,7 @@
     bar.innerHTML =
       '<button type="button" id="globalBack" title="Step back (←)">&#8592;</button>' +
       '<input id="globalScrub" type="range" min="0" max="100" value="0" title="Drag to scrub timeline">' +
+      '<span id="globalScrubTooltip" class="scrub-tooltip" style="display:none;"></span>' +
       '<button type="button" id="globalForward" title="Step forward (→)">&#8594;</button>' +
       '<select id="globalSpeed" title="Playback speed">' +
         '<option value="2">0.5×</option>' +
@@ -351,7 +355,8 @@
         '<option value="0.5">2×</option>' +
         '<option value="0.25">4×</option>' +
       '</select>' +
-      '<span id="globalStepCount" class="step-counter"></span>';
+      '<span id="globalStepCount" class="step-counter"></span>' +
+      '<button type="button" id="fullscreenVizBtn" title="Fullscreen visualization (F)">&#x26F6;</button>';
     document.body.appendChild(bar);
 
     document.getElementById('globalBack').onclick = () => document.getElementById('stepBackBtn')?.click();
@@ -366,23 +371,43 @@
     const savedSpeed = localStorage.getItem('os-speed') || '1';
     document.getElementById('globalSpeed').value = savedSpeed;
 
-    document.getElementById('globalScrub').oninput = e => {
+    /* MOD 2 – Fullscreen button in timeline bar */
+    document.getElementById('fullscreenVizBtn').onclick = () => {
+      document.querySelector('.viz-panel')?.classList.toggle('fullscreen-mode');
+    };
+
+    const scrubEl = document.getElementById('globalScrub');
+    const scrubTooltip = document.getElementById('globalScrubTooltip');
+
+    scrubEl.oninput = e => {
       const local = document.querySelector('#scrubber, #stepSlider');
       if (local) {
         local.value = Math.round((+e.target.value / 100) * (+local.max || 100));
         local.dispatchEvent(new Event('input', { bubbles: true }));
       }
+      /* MOD 3 – Show tooltip next to scrubber handle */
+      const local2 = document.querySelector('#scrubber, #stepSlider');
+      if (local2 && local2.max) {
+        const stepVal = Math.round((+e.target.value / 100) * (+local2.max || 100));
+        const maxVal = +local2.max;
+        scrubTooltip.textContent = `Step ${stepVal} / ${maxVal}`;
+        scrubTooltip.style.display = 'inline';
+        clearTimeout(scrubTooltip._hideTimer);
+        scrubTooltip._hideTimer = setTimeout(() => { scrubTooltip.style.display = 'none'; }, 1500);
+      }
     };
+
     setInterval(() => {
       const local = document.querySelector('#scrubber, #stepSlider');
       if (!local || !local.max) return;
       document.getElementById('globalScrub').value = (+local.value / +local.max) * 100;
       const sc = document.getElementById('globalStepCount');
-      if (sc) sc.textContent = `${local.value}/${local.max}`;
+      /* MOD 3 – Updated step counter format */
+      if (sc) sc.textContent = `Step ${local.value} / ${local.max}`;
     }, 400);
   }
 
-  /* ── Keyboard Shortcuts (Feature 3 partial) ────────── */
+  /* ── Keyboard Shortcuts (Feature 3 partial) — MOD 2 fullscreen key ── */
   function initKeyboard() {
     document.addEventListener('keydown', e => {
       if (/input|textarea|select/i.test(e.target.tagName)) return;
@@ -393,6 +418,10 @@
       if (e.key === '?') document.getElementById('shortcutsBtn')?.click();
       if (e.ctrlKey && e.key === 'z') { e.preventDefault(); window._osUndoRedo?.undo(); }
       if (e.ctrlKey && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); window._osUndoRedo?.redo(); }
+      /* MOD 2 – F key toggles fullscreen */
+      if (e.key === 'f' || e.key === 'F') {
+        document.querySelector('.viz-panel')?.classList.toggle('fullscreen-mode');
+      }
     });
   }
 
@@ -418,6 +447,7 @@
           <div class="shortcut-row"><kbd>←</kbd><span>Step backward one frame</span></div>
           <div class="shortcut-row"><kbd>→</kbd><span>Step forward one frame</span></div>
           <div class="shortcut-row"><kbd>R</kbd><span>Reset simulation</span></div>
+          <div class="shortcut-row"><kbd>F</kbd><span>Toggle fullscreen visualization</span></div>
           <div class="shortcut-row"><kbd>?</kbd><span>Toggle this shortcuts panel</span></div>
           <div class="shortcut-row"><kbd>Ctrl Z</kbd><span>Undo last input change</span></div>
           <div class="shortcut-row"><kbd>Ctrl Y</kbd><span>Redo input change</span></div>
@@ -523,13 +553,50 @@
     });
   }
 
-  /* ── Validation Hints ──────────────────────────────── */
+  /* ── Validation Hints — MOD 20 enhanced ───────────── */
   function initValidationHints() {
-    document.querySelectorAll('input[type="number"]').forEach(input => {
-      input.addEventListener('invalid', () =>
-        showToast(`Fix ${input.id || 'a number field'}: use a value between ${input.min || 'min'} and ${input.max || 'max'}.`));
-      input.addEventListener('input', () =>
-        input.classList.toggle('invalid-field', !input.checkValidity()));
+    document.querySelectorAll('input[type="number"]:not([data-vhook])').forEach(input => {
+      input.dataset.vhook = '1';
+
+      function getErrorMessage(inp) {
+        if (inp.validity.valueMissing) return 'This field is required.';
+        if (inp.validity.rangeUnderflow) return `Must be ≥ ${inp.min}`;
+        if (inp.validity.rangeOverflow) return `Must be ≤ ${inp.max}`;
+        if (inp.validity.stepMismatch) return `Must be a multiple of ${inp.step || 1}`;
+        if (inp.validity.typeMismatch || inp.validity.badInput) return 'Must be a positive number';
+        return `Use a value between ${inp.min || 'min'} and ${inp.max || 'max'}.`;
+      }
+
+      function getOrCreateTip(inp) {
+        let tip = inp.nextElementSibling;
+        if (!tip || !tip.classList.contains('field-error-tip')) {
+          tip = el('span', 'field-error-tip');
+          tip.style.cssText = 'color:var(--danger,#d32f2f);font-size:0.78em;display:block;margin-top:2px;';
+          inp.insertAdjacentElement('afterend', tip);
+        }
+        return tip;
+      }
+
+      function validate() {
+        const valid = input.checkValidity();
+        input.classList.toggle('invalid-field', !valid);
+        if (!valid) {
+          const tip = getOrCreateTip(input);
+          tip.textContent = getErrorMessage(input);
+          tip.style.display = 'block';
+        } else {
+          const tip = input.nextElementSibling;
+          if (tip && tip.classList.contains('field-error-tip')) {
+            tip.style.display = 'none';
+          }
+        }
+      }
+
+      input.addEventListener('invalid', () => {
+        showToast(`Fix ${input.id || 'a number field'}: ${getErrorMessage(input)}`);
+        validate();
+      });
+      input.addEventListener('input', validate);
     });
   }
 
@@ -583,7 +650,7 @@
     });
   }
 
-  /* ── Feature 9: Gantt Chart Zoom & Pan ─────────────── */
+  /* ── Feature 9: Gantt Chart Zoom & Pan — MOD 13 zoom buttons ── */
   function initGanttZoom() {
     document.querySelectorAll('.gantt-wrap:not([data-zoom-init])').forEach(wrap => {
       wrap.dataset.zoomInit = '1';
@@ -595,16 +662,45 @@
         wrap.appendChild(el('span', 'gantt-zoom-hint', 'Ctrl+Scroll to zoom · Drag to pan · Dbl-click to reset'));
       }
 
-      wrap.addEventListener('wheel', e => {
-        if (!e.ctrlKey && !e.metaKey) return;
-        e.preventDefault();
-        const factor = e.deltaY < 0 ? 1.25 : 1 / 1.25;
-        scale = Math.max(1, Math.min(5, scale * factor));
+      function applyScale(newScale) {
+        scale = Math.max(1, Math.min(5, newScale));
         const inner = wrap.querySelector('.gantt-chart') || wrap.firstElementChild;
         if (inner) inner.style.zoom = scale > 1 ? scale : '';
         wrap.style.overflowX = scale > 1 ? 'auto' : '';
         wrap.style.cursor = scale > 1 ? 'grab' : '';
         if (scale === 1) wrap.scrollLeft = 0;
+      }
+
+      /* MOD 13 – Zoom control buttons */
+      if (!wrap.querySelector('.gantt-zoom-controls')) {
+        const zoomControls = el('div', 'gantt-zoom-controls');
+        zoomControls.style.cssText = 'display:flex;gap:4px;margin-top:4px;';
+        const btnIn = el('button', 'zoom-ctrl-btn', '+');
+        btnIn.type = 'button';
+        btnIn.title = 'Zoom in';
+        btnIn.dataset.dir = 'in';
+        const btnOut = el('button', 'zoom-ctrl-btn', '&minus;');
+        btnOut.type = 'button';
+        btnOut.title = 'Zoom out';
+        btnOut.dataset.dir = 'out';
+        const btnReset = el('button', 'zoom-ctrl-btn', '&#x21BA;');
+        btnReset.type = 'button';
+        btnReset.title = 'Reset zoom';
+        btnReset.dataset.dir = 'reset';
+
+        btnIn.onclick = () => applyScale(scale * 1.25);
+        btnOut.onclick = () => applyScale(scale / 1.25);
+        btnReset.onclick = () => applyScale(1);
+
+        zoomControls.append(btnIn, btnOut, btnReset);
+        wrap.appendChild(zoomControls);
+      }
+
+      wrap.addEventListener('wheel', e => {
+        if (!e.ctrlKey && !e.metaKey) return;
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.25 : 1 / 1.25;
+        applyScale(scale * factor);
       }, { passive: false });
 
       wrap.addEventListener('mousedown', e => {
@@ -622,12 +718,7 @@
         wrap.style.cursor = scale > 1 ? 'grab' : '';
       });
       wrap.addEventListener('dblclick', () => {
-        scale = 1;
-        const inner = wrap.querySelector('.gantt-chart') || wrap.firstElementChild;
-        if (inner) inner.style.zoom = '';
-        wrap.style.overflowX = '';
-        wrap.style.cursor = '';
-        wrap.scrollLeft = 0;
+        applyScale(1);
       });
     });
   }
@@ -684,7 +775,7 @@
     };
   }
 
-  /* ── Feature 15: Drag-to-Reorder Table Rows ────────── */
+  /* ── Feature 15: Drag-to-Reorder Table Rows — MOD 23 ── */
   function initDragRows() {
     document.querySelectorAll(
       '.proc-table tbody:not([data-drag-init]), table.process-table tbody:not([data-drag-init])'
@@ -731,7 +822,8 @@
             const si = rows.indexOf(dragSrc), di = rows.indexOf(row);
             if (si < di) tbody.insertBefore(dragSrc, row.nextSibling);
             else tbody.insertBefore(dragSrc, row);
-            showToast('Row reordered — click Run to re-simulate.');
+            /* MOD 23 – More specific toast message */
+            showToast('Row reordered — re-run simulation to update results.');
           }
           row.classList.remove('drag-over');
         });
@@ -746,7 +838,24 @@
     });
   }
 
-  /* ── Feature 16: Metrics Comparison Bar Chart ──────── */
+  /* ── MOD 14: Animated metric number rollup ─────────── */
+  function animateMetricValue(elNode, endVal, duration) {
+    if (!elNode) return;
+    duration = duration || 600;
+    const startTime = performance.now();
+    const startVal = 0;
+    function tick(now) {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const current = startVal + (endVal - startVal) * progress;
+      elNode.textContent = Number.isInteger(endVal) ? Math.round(current) : current.toFixed(2);
+      if (progress < 1) requestAnimationFrame(tick);
+      else elNode.textContent = Number.isInteger(endVal) ? endVal : endVal.toFixed(2);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  /* ── Feature 16: Metrics Comparison Bar Chart — MOD 11 delta indicators, MOD 14 rollup ── */
   function initMetricsChart() {
     if (document.getElementById('metricsChartPanel')) return;
     const target = document.querySelector('.viz-panel');
@@ -800,11 +909,58 @@
       }).join('');
     }
 
+    /* MOD 11 – Delta indicators on metric cards, MOD 14 – animated rollup */
+    function applyDeltasAndRollup() {
+      const cards = document.querySelectorAll('.metric-card');
+      const currentMetrics = {};
+      cards.forEach(card => {
+        const valEl = card.querySelector('.metric-value');
+        const labelEl = card.querySelector('.metric-label');
+        if (!valEl || !labelEl) return;
+        const rawVal = parseFloat(valEl.textContent || '');
+        const label = labelEl.textContent.trim();
+        if (!isNaN(rawVal)) {
+          currentMetrics[label] = rawVal;
+
+          /* MOD 14 – Animate the value rolling up from 0 */
+          animateMetricValue(valEl, rawVal, 600);
+
+          /* MOD 11 – Delta indicator */
+          let deltaSpan = card.querySelector('.metric-delta');
+          if (!deltaSpan) {
+            deltaSpan = el('span', 'metric-delta');
+            deltaSpan.style.cssText = 'font-size:0.82em;margin-left:4px;font-weight:700;';
+            labelEl.insertAdjacentElement('afterend', deltaSpan);
+          }
+          if (_prevMetrics.hasOwnProperty(label)) {
+            const prev = _prevMetrics[label];
+            if (rawVal < prev) {
+              deltaSpan.textContent = ' ↓';
+              deltaSpan.style.color = 'var(--success, #2e7d32)';
+            } else if (rawVal > prev) {
+              deltaSpan.textContent = ' ↑';
+              deltaSpan.style.color = 'var(--danger, #d32f2f)';
+            } else {
+              deltaSpan.textContent = '';
+            }
+          } else {
+            deltaSpan.textContent = '';
+          }
+        }
+      });
+      _prevMetrics = Object.assign({}, currentMetrics);
+    }
+
     /* Hook existing and future run buttons */
     function hookRunBtn(btn) {
       if (btn.dataset.chartHooked) return;
       btn.dataset.chartHooked = '1';
-      btn.addEventListener('click', () => setTimeout(collectAndRender, 700));
+      btn.addEventListener('click', () => {
+        setTimeout(() => {
+          collectAndRender();
+          applyDeltasAndRollup();
+        }, 700);
+      });
     }
     document.querySelectorAll('#runBtn').forEach(hookRunBtn);
     new MutationObserver(() =>
@@ -967,12 +1123,401 @@
     a.href = canvas.toDataURL('image/png'); a.download = 'lesson-snapshot.png'; a.click();
   }
 
+  /* ── MOD 50: Shareable URL state validation ─────────── */
   function applyUrlState() {
     const params = new URLSearchParams(location.search);
     const algo = params.get('algo');
-    if (!algo) return;
-    [...document.querySelectorAll('.algo-tab, .algo-option')]
-      .find(x => x.textContent.trim().startsWith(algo))?.click();
+    if (algo) {
+      [...document.querySelectorAll('.algo-tab, .algo-option')]
+        .find(x => x.textContent.trim().startsWith(algo))?.click();
+    }
+    if (!location.hash || location.hash.length < 5) return;
+    try {
+      const decoded = JSON.parse(decodeURIComponent(escape(atob(location.hash.slice(1)))));
+      if (!decoded || typeof decoded !== 'object' || !decoded.module || !decoded.inputs) {
+        showToast('Saved URL state is incompatible with this version — using defaults.');
+        return;
+      }
+      /* Apply inputs */
+      Object.entries(decoded.inputs).forEach(([id, val]) => {
+        const input = document.getElementById(id);
+        if (input && input.type !== 'checkbox' && input.type !== 'button') {
+          input.value = val;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      });
+      showToast(`Loaded shared state: ${decoded.algorithm || decoded.module}`);
+    } catch(e) {
+      showToast('Saved URL state is incompatible with this version — using defaults.');
+    }
+  }
+
+  /* ── MOD 1: Collapsible Side Panels ─────────────────── */
+  function initCollapsiblePanels() {
+    const panelDefs = [
+      { selector: '.control-panel', arrow: '←', key: 'os-panel-control' },
+      { selector: '.info-panel',    arrow: '→', key: 'os-panel-info'    }
+    ];
+    panelDefs.forEach(({ selector, arrow, key }) => {
+      const panel = document.querySelector(selector);
+      if (!panel || panel.dataset.collapseInit) return;
+      panel.dataset.collapseInit = '1';
+
+      const btn = el('button', 'panel-collapse-btn', arrow);
+      btn.type = 'button';
+      btn.title = 'Collapse/expand panel';
+      btn.style.cssText =
+        'position:absolute;top:8px;right:8px;z-index:10;cursor:pointer;' +
+        'background:var(--surface2,#e0e8f0);border:none;border-radius:4px;' +
+        'padding:2px 7px;font-size:1em;line-height:1.4;';
+
+      if (getComputedStyle(panel).position === 'static') panel.style.position = 'relative';
+      panel.prepend(btn);
+
+      /* Restore saved state */
+      if (localStorage.getItem(key) === 'collapsed') {
+        panel.classList.add('collapsed');
+        btn.textContent = selector.includes('control') ? '→' : '←';
+      }
+
+      btn.onclick = () => {
+        const isCollapsed = panel.classList.toggle('collapsed');
+        if (selector.includes('control')) {
+          btn.textContent = isCollapsed ? '→' : '←';
+        } else {
+          btn.textContent = isCollapsed ? '←' : '→';
+        }
+        localStorage.setItem(key, isCollapsed ? 'collapsed' : 'expanded');
+      };
+    });
+  }
+
+  /* ── MOD 5: Full-screen Viz Mode ────────────────────── */
+  function initFullscreenMode() {
+    function attachFullscreenBtn(vizPanel) {
+      if (vizPanel.dataset.fsInit) return;
+      vizPanel.dataset.fsInit = '1';
+
+      /* Restore persisted state */
+      if (localStorage.getItem('os-fullscreen') === '1') {
+        vizPanel.classList.add('fullscreen-mode');
+      }
+
+      const btn = el('button', 'viz-fullscreen-btn', '&#x26F6;');
+      btn.type = 'button';
+      btn.title = 'Toggle fullscreen (F)';
+      btn.style.cssText =
+        'position:absolute;top:8px;right:8px;z-index:20;cursor:pointer;' +
+        'background:var(--surface2,#e0e8f0);border:none;border-radius:4px;' +
+        'padding:2px 8px;font-size:1.1em;line-height:1.4;';
+
+      if (getComputedStyle(vizPanel).position === 'static') vizPanel.style.position = 'relative';
+      vizPanel.prepend(btn);
+
+      btn.onclick = () => {
+        const active = vizPanel.classList.toggle('fullscreen-mode');
+        localStorage.setItem('os-fullscreen', active ? '1' : '0');
+      };
+    }
+
+    const existing = document.querySelector('.viz-panel');
+    if (existing) {
+      attachFullscreenBtn(existing);
+    } else {
+      /* Wait for .viz-panel to appear */
+      const obs = new MutationObserver(() => {
+        const vp = document.querySelector('.viz-panel');
+        if (vp) { obs.disconnect(); attachFullscreenBtn(vp); }
+      });
+      obs.observe(document.body, { childList: true, subtree: true });
+    }
+
+    /* Escape exits fullscreen */
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        const vp = document.querySelector('.viz-panel');
+        if (vp && vp.classList.contains('fullscreen-mode')) {
+          vp.classList.remove('fullscreen-mode');
+          localStorage.setItem('os-fullscreen', '0');
+        }
+      }
+    });
+  }
+
+  /* ── MOD 6: Persistent Panel Widths ─────────────────── */
+  function initPanelResize() {
+    const grid = document.querySelector('.page-layout-3');
+    if (!grid || grid.dataset.resizeInit) return;
+    grid.dataset.resizeInit = '1';
+
+    /* Restore saved widths */
+    const savedCols = localStorage.getItem('os-panel-cols');
+    if (savedCols) grid.style.gridTemplateColumns = savedCols;
+
+    /* Find column gap areas and insert a draggable handle */
+    function addHandle(colIndex) {
+      const handle = el('div', 'panel-resize-handle');
+      handle.style.cssText =
+        'grid-column:' + colIndex + ';cursor:col-resize;width:6px;' +
+        'background:var(--border,#ccc);opacity:0.5;transition:opacity 0.2s;' +
+        'z-index:5;user-select:none;';
+      handle.onmouseenter = () => handle.style.opacity = '1';
+      handle.onmouseleave = () => handle.style.opacity = '0.5';
+
+      let startX, startCols;
+      handle.addEventListener('mousedown', e => {
+        e.preventDefault();
+        startX = e.clientX;
+        startCols = getComputedStyle(grid).gridTemplateColumns;
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+
+      function onMove(e) {
+        const delta = e.clientX - startX;
+        const parts = startCols.split(' ');
+        if (parts.length < colIndex) return;
+        const idx = colIndex - 1;
+        const orig = parseFloat(parts[idx]);
+        if (isNaN(orig)) return;
+        parts[idx] = Math.max(120, orig + delta) + 'px';
+        grid.style.gridTemplateColumns = parts.join(' ');
+      }
+
+      function onUp() {
+        localStorage.setItem('os-panel-cols', grid.style.gridTemplateColumns);
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      }
+
+      grid.appendChild(handle);
+    }
+
+    /* Add handles after column 1 and column 2 (before col 2 and col 3) */
+    addHandle(1);
+    addHandle(2);
+  }
+
+  /* ── MOD 8: Process Color Legend ────────────────────── */
+  function initProcessColorLegend() {
+    const tableEl = document.querySelector('.proc-table, .process-table');
+    if (!tableEl) return;
+
+    const vizPanel = document.querySelector('.viz-panel');
+    if (!vizPanel) return;
+
+    let legend = document.getElementById('procColorLegend');
+    if (!legend) {
+      legend = el('div', 'proc-color-legend');
+      legend.id = 'procColorLegend';
+      legend.style.cssText =
+        'display:flex;flex-wrap:wrap;gap:8px;padding:6px 10px;' +
+        'background:var(--surface2,#e8f0f8);border-radius:6px;margin-bottom:8px;font-size:0.82em;';
+      const firstCard = vizPanel.querySelector('.card, .panel-card');
+      if (firstCard) firstCard.insertAdjacentElement('beforebegin', legend);
+      else vizPanel.prepend(legend);
+    }
+
+    const entries = [];
+    tableEl.querySelectorAll('tbody tr').forEach(row => {
+      const nameCell = row.querySelector('td:first-child, input[id*="proc"], input[id*="name"]');
+      const colorChip = row.querySelector('.color-chip, [style*="background"], [class*="color"]');
+      const label = nameCell ? (nameCell.textContent.trim() || nameCell.value || '') : '';
+      if (!label) return;
+      const color = colorChip
+        ? (colorChip.style.backgroundColor || getComputedStyle(colorChip).backgroundColor || '#888')
+        : '';
+      if (label) entries.push({ label, color });
+    });
+
+    if (!entries.length) return;
+    legend.innerHTML = '<strong style="margin-right:6px;">Processes:</strong>' +
+      entries.map(e =>
+        `<span style="display:inline-flex;align-items:center;gap:4px;">` +
+        `<span style="display:inline-block;width:12px;height:12px;border-radius:3px;` +
+        `background:${e.color || 'var(--accent,#1673c7)'};border:1px solid #0003;"></span>` +
+        `${e.label}</span>`
+      ).join('');
+  }
+
+  /* ── MOD 22: Bulk Paste Support for Reference String Inputs ── */
+  function initBulkPaste() {
+    const selector = 'input#refInput, input[id*="ref"], textarea[id*="ref"]';
+    function attachPaste(input) {
+      if (input.dataset.bulkPaste) return;
+      input.dataset.bulkPaste = '1';
+      input.addEventListener('paste', e => {
+        e.preventDefault();
+        const text = (e.clipboardData || window.clipboardData).getData('text');
+        const nums = text.split(/[\s,\n]+/).filter(s => /^\d+$/.test(s.trim())).map(s => s.trim());
+        if (!nums.length) return;
+        input.value = nums.join(' ');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        showToast(`Pasted ${nums.length} values — click Run to simulate`);
+      });
+    }
+    document.querySelectorAll(selector).forEach(attachPaste);
+    /* Watch for dynamic inputs */
+    new MutationObserver(() =>
+      document.querySelectorAll(selector + ':not([data-bulk-paste])').forEach(attachPaste)
+    ).observe(document.body, { childList: true, subtree: true });
+  }
+
+  /* ── MOD 24: Add-Row Keyboard Shortcut ──────────────── */
+  function initAddRowShortcut() {
+    document.addEventListener('keydown', e => {
+      if (e.key !== 'Enter') return;
+      const focused = document.activeElement;
+      if (!focused || !/input/i.test(focused.tagName)) return;
+      const tbody = focused.closest('.proc-table tbody, .process-table tbody');
+      if (!tbody) return;
+      const rows = [...tbody.querySelectorAll('tr')];
+      if (!rows.length) return;
+      const lastRow = rows[rows.length - 1];
+      const inputsInLast = [...lastRow.querySelectorAll('input')];
+      if (!inputsInLast.length || inputsInLast[inputsInLast.length - 1] !== focused) return;
+
+      const addBtn = document.getElementById('addProcBtn');
+      if (!addBtn) return;
+      e.preventDefault();
+      addBtn.click();
+      /* Focus first input in new last row */
+      setTimeout(() => {
+        const newRows = [...tbody.querySelectorAll('tr')];
+        const newRow = newRows[newRows.length - 1];
+        newRow?.querySelector('input')?.focus();
+      }, 50);
+    });
+  }
+
+  /* ── MOD 25: Input History Dropdown (ref string) ────── */
+  function initInputHistory() {
+    const refInput = document.getElementById('refInput');
+    if (!refInput || refInput.dataset.histInit) return;
+    refInput.dataset.histInit = '1';
+
+    const HISTORY_KEY = 'os-ref-history';
+    const MAX_HISTORY = 5;
+
+    function getHistory() {
+      try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch(_) { return []; }
+    }
+    function saveHistory(arr) {
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(arr)); } catch(_) {}
+    }
+    function pushHistory(val) {
+      if (!val.trim()) return;
+      let arr = getHistory().filter(x => x !== val);
+      arr.unshift(val);
+      arr = arr.slice(0, MAX_HISTORY);
+      saveHistory(arr);
+    }
+
+    /* Wrap in a positioned container */
+    const wrapper = el('span', 'ref-history-wrap');
+    wrapper.style.cssText = 'position:relative;display:inline-block;';
+    refInput.parentNode.insertBefore(wrapper, refInput);
+    wrapper.appendChild(refInput);
+
+    const clockBtn = el('button', 'ref-history-btn', '🕐');
+    clockBtn.type = 'button';
+    clockBtn.title = 'Show input history';
+    clockBtn.style.cssText =
+      'position:absolute;right:4px;top:50%;transform:translateY(-50%);' +
+      'border:none;background:none;cursor:pointer;font-size:1em;padding:0 2px;';
+    wrapper.appendChild(clockBtn);
+
+    let dropdown = null;
+
+    function closeDropdown() {
+      if (dropdown) { dropdown.remove(); dropdown = null; }
+    }
+
+    clockBtn.onclick = e => {
+      e.stopPropagation();
+      if (dropdown) { closeDropdown(); return; }
+      const history = getHistory();
+      if (!history.length) { showToast('No reference string history yet.'); return; }
+      dropdown = el('div', 'ref-history-dropdown');
+      dropdown.style.cssText =
+        'position:absolute;top:110%;left:0;right:0;background:var(--surface,#fff);' +
+        'border:1px solid var(--border,#ccc);border-radius:6px;z-index:100;' +
+        'box-shadow:0 4px 16px #0002;overflow:hidden;';
+      history.forEach(item => {
+        const opt = el('div', 'ref-history-item', item);
+        opt.style.cssText = 'padding:6px 10px;cursor:pointer;font-family:monospace;font-size:0.9em;';
+        opt.onmouseenter = () => opt.style.background = 'var(--surface2,#e8f0f8)';
+        opt.onmouseleave = () => opt.style.background = '';
+        opt.onclick = () => {
+          refInput.value = item;
+          refInput.dispatchEvent(new Event('input', { bubbles: true }));
+          closeDropdown();
+        };
+        dropdown.appendChild(opt);
+      });
+      wrapper.appendChild(dropdown);
+    };
+
+    document.addEventListener('click', e => {
+      if (dropdown && !wrapper.contains(e.target)) closeDropdown();
+    });
+
+    /* On successful run, push current value to history */
+    document.getElementById('runBtn')?.addEventListener('click', () => {
+      const val = refInput.value.trim();
+      if (val) pushHistory(val);
+    });
+    /* Also hook future runBtns */
+    new MutationObserver(() => {
+      document.querySelectorAll('#runBtn:not([data-hist-hooked])').forEach(btn => {
+        btn.dataset.histHooked = '1';
+        btn.addEventListener('click', () => {
+          const val = refInput.value.trim();
+          if (val) pushHistory(val);
+        });
+      });
+    }).observe(document.body, { childList: true, subtree: true });
+  }
+
+  /* ── MOD 27: ARIA Live Region for Screen Readers ────── */
+  function initAriaLive() {
+    if (document.getElementById('osAriaLive')) return;
+    const region = el('div', 'aria-live-region');
+    region.id = 'osAriaLive';
+    region.setAttribute('aria-live', 'polite');
+    region.setAttribute('aria-atomic', 'true');
+    region.style.cssText =
+      'position:absolute;width:1px;height:1px;padding:0;overflow:hidden;' +
+      'clip:rect(0,0,0,0);white-space:nowrap;border:0;';
+    document.body.appendChild(region);
+
+    window._osAnnounce = function(msg) {
+      region.textContent = '';
+      setTimeout(() => { region.textContent = msg; }, 10);
+    };
+
+    function announceCurrentStep() {
+      const current = document.querySelector(
+        '.step-entry.current, .dec-entry.current, .safety-step.current');
+      if (current) window._osAnnounce(current.textContent.trim().replace(/\s+/g, ' '));
+    }
+
+    ['stepFwdBtn', 'stepBackBtn', 'playBtn'].forEach(id => {
+      document.getElementById(id)?.addEventListener('click', () => {
+        setTimeout(announceCurrentStep, 150);
+      });
+    });
+
+    /* Also hook future step buttons */
+    new MutationObserver(() => {
+      ['stepFwdBtn', 'stepBackBtn', 'playBtn'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn && !btn.dataset.ariaHooked) {
+          btn.dataset.ariaHooked = '1';
+          btn.addEventListener('click', () => setTimeout(announceCurrentStep, 150));
+        }
+      });
+    }).observe(document.body, { childList: true, subtree: true });
   }
 
   /* ── DOMContentLoaded ──────────────────────────────── */
@@ -998,6 +1543,23 @@
     applyUrlState();
     markProgress();
 
+    /* MOD 1 */
+    initCollapsiblePanels();
+    /* MOD 5 */
+    initFullscreenMode();
+    /* MOD 6 */
+    initPanelResize();
+    /* MOD 8 */
+    initProcessColorLegend();
+    /* MOD 22 */
+    initBulkPaste();
+    /* MOD 24 */
+    initAddRowShortcut();
+    /* MOD 25 */
+    initInputHistory();
+    /* MOD 27 */
+    initAriaLive();
+
     /* Poll for dynamically created DOM elements */
     setInterval(initGlossary,          2500);
     setInterval(initComplexityBadges,  1800);
@@ -1006,5 +1568,9 @@
     setInterval(initMetricsChart,      2500);
     setInterval(initTraceAnnotations,  600);
     setInterval(initValidationHints,   3000);
+    setInterval(initCollapsiblePanels, 3000);
+    setInterval(initProcessColorLegend, 2000);
+    setInterval(initBulkPaste,         3000);
+    setInterval(initInputHistory,      3000);
   });
 })();

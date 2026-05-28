@@ -147,6 +147,29 @@
   text-align: center;
 }
 .seek-accum-sub { font-size: .72rem; color: var(--muted); text-align: center; }
+
+/* ─── MOD 40: Validation ─────────────────────────────── */
+.invalid-field { border-color: var(--disk-color) !important; box-shadow: 0 0 0 2px rgba(239,108,62,.25) !important; }
+.field-hint { font-size: .72rem; margin-top: 2px; }
+
+/* ─── MOD 41: Direction toggle ───────────────────────── */
+.direction-toggle-group { display:flex; gap:6px; margin-top:4px; }
+.direction-btn {
+  flex:1; padding:5px 8px; border-radius:var(--radius-sm);
+  border:1px solid var(--line); cursor:pointer; text-align:center;
+  font-size:.78rem; font-weight:600; background:var(--panel); color:var(--muted);
+  transition:all .15s;
+}
+.direction-btn.active { background:var(--disk-color); color:#fff; border-color:#b84520; }
+.direction-btn:hover { background:var(--disk-light); color:#8b2500; }
+
+/* ─── MOD 43: Starvation warning ─────────────────────── */
+.sstf-warn-item {
+  background:var(--disk-light); border-radius:var(--radius-sm);
+  padding:4px 8px; margin-bottom:3px; font-size:.78rem;
+  border-left:3px solid var(--disk-color);
+}
+
 .seek-delta {
   font-size: .78rem; color: var(--muted);
   display: flex; justify-content: space-between; align-items: center;
@@ -252,8 +275,9 @@
       <input type="range" id="headSlider" min="0" max="199" value="53" style="flex:1"
         oninput="syncHead(this.value)">
       <input type="number" id="headInput" value="53" min="0" max="499" style="width:58px"
-        oninput="syncHead(this.value)">
+        oninput="syncHead(this.value);validateHeadPosition()">
     </div>
+    <div id="headErr" class="field-hint" style="color:var(--disk-color);display:none"></div>
   </div>
 
   <div id="dirRow">
@@ -376,6 +400,11 @@
   <div id="metricsArea" style="display:none">
     <div class="metrics-grid" id="metricsGrid"></div>
     <div id="seekTimeRow" style="display:none;margin-top:8px;font-size:.82rem;color:var(--muted)"></div>
+    <!-- MOD 43: SSTF Starvation Warning -->
+    <div id="sstfStarvWarn" style="display:none;margin-top:8px">
+      <div class="section-title" style="color:var(--disk-color)">Starvation Risk (SSTF)</div>
+      <div id="sstfStarvList"></div>
+    </div>
   </div>
 
 </main>
@@ -771,7 +800,18 @@ function buildStepReason(algo,from,to,dist,reqs,isBoundary,seq,stepIdx){
 }
 
 // ── Run ────────────────────────────────────────────────
-document.getElementById('runBtn').onclick=run;
+document.getElementById('runBtn').onclick=function(){
+  // MOD 40: validate head before running
+  if(!validateHeadPosition()){
+    const toast=document.createElement('div');
+    toast.style.cssText='position:fixed;bottom:20px;right:20px;background:var(--disk-color);color:#fff;padding:10px 18px;border-radius:8px;font-size:.82rem;font-weight:700;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.2)';
+    toast.textContent='Head position must be within [0, maxCylinder]';
+    document.body.appendChild(toast);
+    setTimeout(()=>toast.remove(),3000);
+    return;
+  }
+  run();
+};
 function run(){
   stopPlay();
   const head=parseInt(document.getElementById('headInput').value)||53;
@@ -795,6 +835,8 @@ function run(){
   updateTrack(currentStep);
   updatePlayback();
   if(compareMode) runComparison();
+  // MOD 43: SSTF starvation check
+  renderSSTFStarvation();
 }
 
 // ── Track rendering ────────────────────────────────────
@@ -895,16 +937,23 @@ function renderMetrics(){
   const avg=moves>0?(total/moves).toFixed(1):0;
   const maxSingle=Math.max(...seekSteps.slice(1).map(s=>s.dist),0);
   const seekRate=parseFloat(document.getElementById('seekRate').value);
+  const hasRate=!isNaN(seekRate)&&seekRate>0;
+  const seekTimeMs=hasRate?(total*seekRate).toFixed(1):null;
 
+  // MOD 42: include seek time card when rate is set
   document.getElementById('metricsGrid').innerHTML=`
     <div class="metric-card"><div class="metric-value" style="color:var(--disk-color)">${total}</div><div class="metric-label">Total Seek</div></div>
     <div class="metric-card"><div class="metric-value" style="color:var(--cpu-color)">${avg}</div><div class="metric-label">Avg Seek</div></div>
     <div class="metric-card"><div class="metric-value" style="color:var(--accent-3)">${maxSingle}</div><div class="metric-label">Max Single</div></div>
     <div class="metric-card"><div class="metric-value" style="color:var(--mem-color)">${moves}</div><div class="metric-label">Movements</div></div>
+    ${hasRate?`<div class="metric-card" style="grid-column:span 2"><div class="metric-value" style="color:var(--disk-color);font-size:1.2rem">${seekTimeMs} ms</div><div class="metric-label">Total Seek Time (at ${seekRate} ms/cyl)</div></div>`:''}
   `;
-  if(!isNaN(seekRate) && seekRate>0){
-    document.getElementById('seekTimeRow').style.display='';
-    document.getElementById('seekTimeRow').innerHTML=`Estimated total seek time: <strong>${(total*seekRate).toFixed(1)} ms</strong> (at ${seekRate} ms/cylinder)`;
+  const seekRow=document.getElementById('seekTimeRow');
+  if(hasRate){
+    seekRow.style.display='';
+    seekRow.innerHTML=`Estimated total seek time: <strong>${seekTimeMs} ms</strong> (at ${seekRate} ms/cylinder)`;
+  } else {
+    seekRow.style.display='none';
   }
 }
 
@@ -1059,6 +1108,58 @@ document.getElementById('resetBtn').onclick=()=>{
 };
 
 renderRequests();
+
+// ── MOD 40: Head position validation ──────────────────
+function validateHeadPosition(){
+  const headInput=document.getElementById('headInput');
+  const head=parseInt(headInput.value||'0');
+  const maxCyl=parseInt(document.getElementById('maxCyl').value||'199');
+  const errEl=document.getElementById('headErr');
+  if(head<0||head>maxCyl){
+    headInput.classList.add('invalid-field');
+    errEl.textContent=`Head must be between 0 and ${maxCyl}`;
+    errEl.style.display='';
+    return false;
+  }
+  headInput.classList.remove('invalid-field');
+  errEl.style.display='none';
+  return true;
+}
+document.getElementById('maxCyl').addEventListener('change',validateHeadPosition);
+
+// ── MOD 41: Direction is already handled by setDir()/currentDir ──
+// The existing dirRow buttons and updateAlgoInfo() already show/hide
+// the direction panel for SCAN/CSCAN/LOOK/CLOOK/N-STEP/FSCAN.
+
+// ── MOD 43: SSTF Starvation detection ─────────────────
+function detectSSTFStarvation(serviceOrder){
+  if(!serviceOrder||!serviceOrder.length) return [];
+  const warnings=[];
+  serviceOrder.forEach((req,pos)=>{
+    if(pos>serviceOrder.length*0.8){
+      warnings.push({req,pos,waited:pos});
+    }
+  });
+  return warnings;
+}
+
+function renderSSTFStarvation(){
+  const warnEl=document.getElementById('sstfStarvWarn');
+  if(currentAlgo!=='sstf'||!seekSteps.length){
+    warnEl.style.display='none';
+    return;
+  }
+  const serviceOrder=seekSteps.slice(1).filter(s=>requests.includes(s.to)).map(s=>s.to);
+  const warnings=detectSSTFStarvation(serviceOrder);
+  if(!warnings.length){
+    warnEl.style.display='none';
+    return;
+  }
+  warnEl.style.display='';
+  document.getElementById('sstfStarvList').innerHTML=warnings.map(w=>
+    `<div class="sstf-warn-item">Cylinder <strong>${w.req}</strong> was served ${w.pos+1}th out of ${serviceOrder.length} — in the last ${Math.round((serviceOrder.length-w.pos)/serviceOrder.length*100)}% of service order (starvation risk)</div>`
+  ).join('');
+}
 </script>
 <script src="js/global-ui.js"></script>
 </body>

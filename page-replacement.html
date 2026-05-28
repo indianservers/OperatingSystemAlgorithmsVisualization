@@ -100,6 +100,28 @@
 .fc-ptr { top: 4px; left: 4px; color: var(--accent); }
 @keyframes bounce-in { 0%{transform:scale(.8);opacity:.5} 60%{transform:scale(1.08)} 100%{transform:scale(1);opacity:1} }
 @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-4px)} 60%{transform:translateX(4px)} 80%{transform:translateX(-2px)} }
+@keyframes fadeIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
+
+/* ─── Working Set Window ──────────────────────────────── */
+.working-set-window {
+  display: flex; gap: 4px; flex-wrap: wrap;
+  padding: 8px 10px; background: var(--blue-1); border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.ws-token {
+  width: 32px; height: 32px; border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  font-size: .82rem; font-weight: 800;
+  border: 1px solid var(--line); transition: all .2s; flex-shrink: 0;
+}
+.ws-token.in-window {
+  background: linear-gradient(135deg,#e0e2fd,#b5b9fb);
+  border-color: #5865f2; color: #2d3191;
+  box-shadow: 0 0 0 2px rgba(88,101,242,.2);
+}
+.ws-token.out-of-window {
+  background: var(--panel); color: var(--muted);
+}
 
 /* ─── FIFO queue ──────────────────────────────────── */
 .fifo-queue {
@@ -562,7 +584,10 @@ function runAlgo(refs, nF, algo){
           });
           const idx3=frames.indexOf(lfuPage);
           evicted=lfuPage; frames[idx3]=page;
-          whyEvict=`P${evicted} had lowest frequency (${freq[evicted]||0} uses)`;
+          // Check if there was a frequency tie (MOD 36)
+          const tiedPages=frames.filter((f,fi)=>fi!==idx3&&f!==-1&&(freq[f]||0)===lfuF);
+          const hadTie=tiedPages.length>0;
+          whyEvict=`P${evicted} had lowest frequency (${freq[evicted]||0} uses)`+(hadTie?` (tie broken by recency — P${evicted} was least recently used among equal-frequency pages)`:'');
         } else if(algo==='optimal'){
           let farthest=-1, farthestIdx=-1;
           frames.forEach((f,idx)=>{
@@ -790,6 +815,32 @@ function updateDisplay(stepIdx){
   const nF=parseInt(document.getElementById('frameInput').value)||3;
 
   renderRefString(refs,stepIdx);
+
+  // MOD 38 — Working Set Window visualization
+  const wsWrap=document.getElementById('workingSetWrap')||(() => {
+    const div=document.createElement('div');
+    div.id='workingSetWrap';
+    div.style.marginTop='8px';
+    document.getElementById('refDisplay').parentElement.appendChild(div);
+    return div;
+  })();
+  if(currentAlgo==='working_set'&&step){
+    const windowStart=Math.max(0,step.step-1-4);
+    const windowPages=[...new Set(refs.slice(windowStart,step.step-1))];
+    wsWrap.innerHTML=`
+      <div class="section-title" style="margin-bottom:4px">Working Set Window (last 5 refs)</div>
+      <div class="working-set-window">
+        ${refs.map((r,i)=>{
+          const inWindow=i>=windowStart&&i<step.step-1;
+          return `<div class="ws-token ${inWindow?'in-window':'out-of-window'}" title="${inWindow?'In working set':'Outside window'}">${r}</div>`;
+        }).join('')}
+      </div>
+      <div style="font-size:.72rem;color:var(--muted);margin-top:4px">Working set: {${windowPages.join(', ')}} &mdash; ${windowPages.length} distinct pages</div>`;
+    wsWrap.style.display='';
+  } else {
+    wsWrap.style.display='none';
+  }
+
   renderFrames(step,nF);
   renderHistTable(stepIdx);
 
@@ -829,6 +880,26 @@ function run(){
   const nF=parseInt(document.getElementById('frameInput').value)||3;
   if(!refs.length) return;
 
+  // MOD 37 — Optimal algorithm lookahead validation
+  if(currentAlgo==='optimal'){
+    const warn=document.getElementById('optWarnBanner')||(() => {
+      const d=document.createElement('div');
+      d.id='optWarnBanner';
+      d.style.cssText='padding:8px 12px;background:#fff3d4;border:1px solid #d59a26;border-radius:8px;font-size:.78rem;color:#7a4800;margin-bottom:8px';
+      document.querySelector('.viz-panel').prepend(d);
+      return d;
+    })();
+    if(refs.length<=nF){
+      warn.innerHTML=`<strong>Trivial Optimal case:</strong> reference string length (${refs.length}) &le; frames (${nF}). All pages load without eviction &mdash; no eviction decisions made. Results are not meaningful for comparison.`;
+      warn.style.display='';
+    } else {
+      warn.style.display='none';
+    }
+  } else {
+    const w=document.getElementById('optWarnBanner');
+    if(w) w.style.display='none';
+  }
+
   simSteps=runAlgo(refs,nF,currentAlgo);
   currentStep=simSteps.length;
 
@@ -843,12 +914,50 @@ function run(){
   const faults=simSteps[simSteps.length-1]?.faults||0;
   const hits=simSteps.length-faults;
   const hr=(hits/simSteps.length*100).toFixed(1);
+
+  // MOD 39 — Hit ratio accuracy: compulsory miss exclusion
+  const distinctPages=[...new Set(refs)].length;
+  const compulsoryMisses=Math.min(distinctPages,nF);
+  const adjustedFaults=Math.max(0,faults-compulsoryMisses);
+  const adjustedFaultRate=refs.length>compulsoryMisses
+    ?(adjustedFaults/(refs.length-compulsoryMisses)*100).toFixed(1)
+    :'0.0';
+
   document.getElementById('metricsGrid').innerHTML=`
     <div class="metric-card"><div class="metric-value" style="color:var(--disk-color)">${faults}</div><div class="metric-label">Page Faults</div></div>
     <div class="metric-card"><div class="metric-value" style="color:var(--mem-color)">${hits}</div><div class="metric-label">Page Hits</div></div>
     <div class="metric-card"><div class="metric-value" style="color:var(--accent)">${hr}%</div><div class="metric-label">Hit Ratio</div></div>
     <div class="metric-card"><div class="metric-value">${simSteps.length}</div><div class="metric-label">References</div></div>
+    <div class="metric-card" data-tip="First access to each page is always a miss regardless of algorithm"><div class="metric-value" style="color:var(--muted)">${compulsoryMisses}</div><div class="metric-label">Compulsory Misses</div></div>
+    <div class="metric-card" data-tip="Fault rate excluding unavoidable first-access misses — fairer algorithm comparison"><div class="metric-value" style="color:var(--accent)">${adjustedFaultRate}%</div><div class="metric-label">Adjusted Fault Rate</div></div>
   `;
+
+  // MOD 35 — Bélady's Anomaly Auto-Detection for FIFO
+  if(currentAlgo==='fifo'){
+    const nFplus1=nF+1;
+    const stepsPlus=runAlgo(refs,nFplus1,'fifo');
+    const faultsPlus=stepsPlus[stepsPlus.length-1]?.faults||0;
+    const beladyBanner=document.getElementById('beladyAutoBanner')||(() => {
+      const div=document.createElement('div');
+      div.id='beladyAutoBanner';
+      div.style.cssText='margin-top:12px;padding:12px 16px;background:linear-gradient(135deg,#e0e2fd,#b5b9fb);border:2px solid #5865f2;border-radius:10px;font-size:.82rem;animation:fadeIn .3s ease';
+      document.getElementById('metricsArea').after(div);
+      return div;
+    })();
+    if(faultsPlus>faults){
+      beladyBanner.innerHTML=`<strong style="color:#2d3191;font-size:.95rem">&#9889; B&eacute;lady's Anomaly Detected!</strong><br>
+        <span style="color:#2d3191">With <strong>${nF} frames</strong>: ${faults} faults &nbsp;&rarr;&nbsp;
+        With <strong>${nFplus1} frames</strong>: <strong style="color:#ef4444">${faultsPlus} faults</strong> (more frames = MORE faults!)</span><br>
+        <span style="font-size:.72rem;color:#5865f2;margin-top:4px;display:block">This is B&eacute;l&aacute;dy's Anomaly &mdash; a counter-intuitive property unique to FIFO (and some other non-stack algorithms).</span>`;
+      beladyBanner.style.display='';
+    } else {
+      beladyBanner.innerHTML=`<span style="color:#2d3191;font-size:.8rem">No B&eacute;l&aacute;dy's Anomaly detected for this input (${nF}&rarr;${nFplus1} frames: ${faults}&rarr;${faultsPlus} faults &mdash; expected &le;).</span>`;
+      beladyBanner.style.display='';
+    }
+  } else {
+    const bb=document.getElementById('beladyAutoBanner');
+    if(bb) bb.style.display='none';
+  }
 
   updateDisplay(currentStep);
   if(compareMode) runComparison();
@@ -908,7 +1017,10 @@ function runComparison(){
   }).join('');
   const best=results.find(r=>r.faults===minF);
   const worst=results.find(r=>r.faults===maxF);
-  document.getElementById('compSummary').innerHTML=`<strong style="color:var(--mem-color)">${names[best.algo]}</strong> performed best (${best.faults} faults). <strong style="color:var(--disk-color)">${names[worst.algo]}</strong> performed worst (${worst.faults} faults) with ${nF} frames.`;
+  // MOD 39 — mention compulsory misses in comparison summary
+  const distinctPages=[...new Set(refs)].length;
+  const compulsoryMisses=Math.min(distinctPages,nF);
+  document.getElementById('compSummary').innerHTML=`<strong style="color:var(--mem-color)">${names[best.algo]}</strong> performed best (${best.faults} faults). <strong style="color:var(--disk-color)">${names[worst.algo]}</strong> performed worst (${worst.faults} faults) with ${nF} frames. <span style="color:var(--muted)">Note: ${compulsoryMisses} of these faults are compulsory (unavoidable cold-start misses) &mdash; subtract for a fairer comparison.</span>`;
 }
 
 // ── Bélady's Anomaly ───────────────────────────────────
@@ -1017,16 +1129,25 @@ function renderSummary(refs, nF, faults, hits){
   const names={fifo:'FIFO',lru:'LRU',lfu:'LFU',optimal:'Optimal',clock:'Second Chance',mru:'MRU',nru:'NRU',enhanced_clock:'Enhanced Clock',working_set:'Working Set',wsclock:'WSClock',random:'Random'};
   const qual=faults/refs.length;
   let perf=qual<.2?'excellent':qual<.4?'good':qual<.6?'average':'poor';
+  // MOD 39 — compulsory miss info in summary
+  const distinctPages=[...new Set(refs)].length;
+  const compulsoryMisses=Math.min(distinctPages,nF);
+  const adjustedFaults=Math.max(0,faults-compulsoryMisses);
+  const adjustedFaultRate=refs.length>compulsoryMisses
+    ?(adjustedFaults/(refs.length-compulsoryMisses)*100).toFixed(1)
+    :'0.0';
   document.getElementById('summaryContent').innerHTML=`
     <strong>${names[currentAlgo]}</strong> with <strong>${nF} frames</strong> on <strong>${refs.length} references</strong>:<br>
-    → <strong style="color:var(--disk-color)">${faults} page faults</strong> (${(100-parseFloat(hr)).toFixed(1)}% fault rate)<br>
-    → <strong style="color:var(--mem-color)">${hits} hits</strong> (${hr}% hit ratio)<br>
-    → Performance: <strong>${perf}</strong><br><br>
-    ${currentAlgo==='fifo'?'<em>Note: FIFO may exhibit Bélády\'s Anomaly — try the demo above.</em>':''}
-    ${currentAlgo==='optimal'?'<em>Optimal is the theoretical best — no real algorithm can match it.</em>':''}
+    &rarr; <strong style="color:var(--disk-color)">${faults} page faults</strong> (${(100-parseFloat(hr)).toFixed(1)}% fault rate)<br>
+    &rarr; <strong style="color:var(--mem-color)">${hits} hits</strong> (${hr}% hit ratio)<br>
+    &rarr; Performance: <strong>${perf}</strong><br>
+    &rarr; Compulsory (cold-start) misses: <strong>${compulsoryMisses}</strong> (first load of each of ${distinctPages} distinct pages, unavoidable)<br>
+    &rarr; Adjusted fault rate (excl. compulsory): <strong style="color:var(--accent)">${adjustedFaultRate}%</strong> &mdash; fairer for algorithm comparison<br><br>
+    ${currentAlgo==='fifo'?'<em>Note: FIFO may exhibit B&eacute;l&aacute;dy\'s Anomaly &mdash; the auto-detection above checks this automatically.</em>':''}
+    ${currentAlgo==='optimal'?'<em>Optimal is the theoretical best &mdash; no real algorithm can match it.</em>':''}
     ${currentAlgo==='lru'?'<em>LRU closely approximates Optimal and is widely used in practice.</em>':''}
     ${currentAlgo==='clock'?'<em>Second Chance is a practical LRU approximation used in modern OS kernels.</em>':''}
-    ${currentAlgo==='lfu'?'<em>LFU can retain stale pages with high historical frequency — consider recency too.</em>':''}
+    ${currentAlgo==='lfu'?'<em>LFU uses recency (LRU order) to break frequency ties &mdash; see "Why Evicted" column for details.</em>':''}
   `;
 }
 

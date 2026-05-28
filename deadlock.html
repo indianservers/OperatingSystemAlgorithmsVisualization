@@ -126,6 +126,23 @@
       font-weight: 700;
     }
     .res-count-controls { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; }
+
+    /* ─── MOD 44: Need auto-compute ─────────────────── */
+    .invalid-field { border-color: var(--disk-color) !important; }
+    #needErr { font-size:.78rem; padding:6px; display:none; color:var(--disk-color); }
+
+    /* ─── MOD 45: Resource Request ──────────────────── */
+    .request-result-safe { color: var(--mem-color); font-weight:700; }
+    .request-result-unsafe { color: var(--disk-color); font-weight:700; }
+
+    /* ─── MOD 46: Mode buttons ───────────────────────── */
+    .mode-btn {
+      padding:5px 12px; border-radius:var(--radius-sm);
+      font-size:.78rem; font-weight:600;
+      border:1px solid var(--line); cursor:pointer;
+      background:var(--panel); color:var(--muted); transition:all .15s;
+    }
+    .mode-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
   </style>
 </head>
 <body>
@@ -157,8 +174,17 @@
         <div class="card-icon" style="background:linear-gradient(135deg,#e0e2fd,#b5b9fb)">🔒</div>
         <div>
           <div class="card-title">Banker's Algorithm</div>
-          <div class="card-subtitle">Deadlock Avoidance</div>
+          <div class="card-subtitle" id="modeSubtitle">Deadlock Avoidance</div>
         </div>
+      </div>
+    </div>
+
+    <!-- MOD 46: Analysis Mode Toggle -->
+    <div id="dlModeGroup" style="margin-bottom:4px">
+      <div class="section-title">Analysis Mode</div>
+      <div style="display:flex;gap:6px">
+        <button class="mode-btn active" id="avoidanceMode">Prevention (Banker's)</button>
+        <button class="mode-btn" id="detectionMode">Detection (RAG)</button>
       </div>
     </div>
 
@@ -204,6 +230,22 @@
     <div class="btn-group">
       <button class="btn btn-secondary btn-sm" id="loadExampleBtn">Load Example</button>
       <button class="btn btn-secondary btn-sm" id="randomBtn">⚡ Random</button>
+    </div>
+
+    <!-- MOD 45: Resource Request Simulation Panel -->
+    <div class="resource-request-panel" id="requestPanel" style="margin-top:4px">
+      <div class="section-title">Resource Request Simulation</div>
+      <div class="form-group">
+        <label class="form-label">Process (P<sub>i</sub>)</label>
+        <input type="number" id="reqProcess" value="0" min="0" style="width:70px">
+      </div>
+      <div class="form-group" style="margin-top:6px">
+        <label class="form-label">Request Vector</label>
+        <input type="text" id="reqVector" placeholder="e.g. 1 0 2" value="1 0 2" style="width:100%">
+        <div class="form-hint">Space-separated amounts for each resource</div>
+      </div>
+      <button class="btn btn-secondary btn-sm w-full" id="simulateRequestBtn" style="margin-top:6px">Simulate Request</button>
+      <div id="requestResult" style="margin-top:8px;font-size:.82rem;display:none"></div>
     </div>
 
     <div class="divider"></div>
@@ -264,6 +306,19 @@
     <div id="metricsArea" style="display:none">
       <div class="metrics-grid" id="metricsGrid"></div>
     </div>
+
+    <!-- MOD 46: Detection Panel -->
+    <div id="detectionPanel" style="display:none" class="card">
+      <div class="panel-title">Deadlock Detection</div>
+      <div style="font-size:.82rem;color:var(--muted);margin-bottom:10px">
+        Detection algorithm runs periodically to check if deadlock exists. Unlike avoidance, it allows potentially unsafe states and recovers if needed.
+      </div>
+      <button class="btn btn-warning btn-sm" id="runDetectionBtn">Run Detection Algorithm</button>
+      <div id="detectionResult" style="margin-top:10px;font-size:.82rem"></div>
+    </div>
+
+    <!-- MOD 44: Need error display -->
+    <div id="needErr" style="display:none;color:var(--disk-color);font-size:.78rem;padding:6px;background:var(--disk-light);border-radius:var(--radius-sm)"></div>
 
     <div class="card">
       <div class="panel-title">Deadlock Method Library</div>
@@ -364,8 +419,9 @@ function renderInputs() {
 function renderMatrix(id, data, label) {
   const tbl = document.getElementById(id);
   const headers = ['<th>P</th>', ...Array.from({length:nRes}, (_,r) => `<th>${RES_LABELS[r]}</th>`)].join('');
+  const prefix = id === 'allocTable' ? 'alloc' : 'max';
   const rows = data.map((row, i) => {
-    const cells = row.map((v, r) => `<td><input type="number" min="0" max="20" value="${v}" onchange="${id==='allocTable'?'allocation':'maxMatrix'}[${i}][${r}]=parseInt(this.value)||0"></td>`).join('');
+    const cells = row.map((v, r) => `<td><input type="number" min="0" max="20" value="${v}" id="${prefix}_${i}_${r}" onchange="${id==='allocTable'?'allocation':'maxMatrix'}[${i}][${r}]=parseInt(this.value)||0;autoComputeNeed()"></td>`).join('');
     return `<tr><td class="proc-cell">P${i}</td>${cells}</tr>`;
   }).join('');
   tbl.innerHTML = `<thead><tr>${headers}</tr></thead><tbody>${rows}</tbody>`;
@@ -471,9 +527,10 @@ function renderNeedMatrix(need) {
   const tbl = document.getElementById('needTable');
   const headers = ['<th>P</th>', ...Array.from({length:nRes}, (_,r) => `<th>${RES_LABELS[r]}</th>`)].join('');
   const rows = need.map((row, i) => {
-    const cells = row.map(v => {
+    const cells = row.map((v, r) => {
       const unsafe = v < 0;
-      return `<td style="${unsafe?'color:var(--disk-color);font-weight:700':''}">
+      // MOD 44: add id to need cells for auto-compute targeting
+      return `<td id="need_${i}_${r}" style="${unsafe?'color:var(--disk-color);font-weight:700':''}">
         ${unsafe ? `<span title="Need > Max!">${v}</span>` : v}
       </td>`;
     }).join('');
@@ -636,6 +693,212 @@ document.getElementById('randomBtn').addEventListener('click', () => {
   const allocSum = Array.from({length:nRes}, (_, r) => allocation.reduce((s,row) => s + row[r], 0));
   available = allocSum.map((s, r) => Math.max(0, total[r] - s));
   renderInputs();
+});
+
+// ── MOD 44: Need auto-compute ─────────────────────────────
+function autoComputeNeed() {
+  // Only works if needTable is visible (after run, or we can show it live)
+  const needTbl = document.getElementById('needTable');
+  if (!needTbl) return true;
+  let hasError = false;
+  for (let i = 0; i < nProcs; i++) {
+    for (let j = 0; j < nRes; j++) {
+      const maxInput = document.getElementById(`max_${i}_${j}`);
+      const allocInput = document.getElementById(`alloc_${i}_${j}`);
+      if (!maxInput || !allocInput) continue;
+      const maxVal = parseInt(maxInput.value) || 0;
+      const allocVal = parseInt(allocInput.value) || 0;
+      const need = maxVal - allocVal;
+      // Highlight max input if negative
+      if (need < 0) {
+        maxInput.classList.add('invalid-field');
+        hasError = true;
+      } else {
+        maxInput.classList.remove('invalid-field');
+      }
+      // Update need cell in needTable if visible
+      const needCell = document.getElementById(`need_${i}_${j}`);
+      if (needCell) {
+        needCell.textContent = need >= 0 ? need : 0;
+        needCell.style.color = need < 0 ? 'var(--disk-color)' : '';
+        needCell.style.fontWeight = need < 0 ? '700' : '';
+      }
+    }
+  }
+  const errDiv = document.getElementById('needErr');
+  if (errDiv) {
+    errDiv.textContent = hasError ? 'Need cannot be negative — Max must be >= Allocation for all cells' : '';
+    errDiv.style.display = hasError ? '' : 'none';
+  }
+  return !hasError;
+}
+
+// ── MOD 45: Resource Request Simulation ───────────────────
+document.getElementById('simulateRequestBtn').addEventListener('click', () => {
+  const procIdx = parseInt(document.getElementById('reqProcess').value) || 0;
+  const reqVecStr = document.getElementById('reqVector').value || '';
+  const reqVec = reqVecStr.trim().split(/\s+/).map(Number).filter(n => !isNaN(n));
+  const resultEl = document.getElementById('requestResult');
+  resultEl.style.display = '';
+
+  if (procIdx < 0 || procIdx >= nProcs) {
+    resultEl.innerHTML = '<span class="request-result-unsafe">Invalid process index.</span>';
+    return;
+  }
+  if (!reqVec.length) {
+    resultEl.innerHTML = '<span class="request-result-unsafe">Please enter a valid request vector.</span>';
+    return;
+  }
+
+  // Read current state from inputs
+  const readMatrix = (id, rows, cols) => {
+    const tbl = document.getElementById(id);
+    const inputs = tbl.querySelectorAll('input');
+    const mat = [];
+    for (let i = 0; i < rows; i++) {
+      mat.push([]);
+      for (let j = 0; j < cols; j++) mat[i].push(parseInt(inputs[i*cols+j].value)||0);
+    }
+    return mat;
+  };
+  const readAvail = () => {
+    return Array.from(document.getElementById('availableInputs').querySelectorAll('input')).map(i=>parseInt(i.value)||0);
+  };
+
+  const alloc = readMatrix('allocTable', nProcs, nRes);
+  const max = readMatrix('maxTable', nProcs, nRes);
+  const avail = readAvail();
+  const need = alloc.map((row, i) => row.map((v, j) => max[i][j] - v));
+
+  // Step 1: Request <= Need[procIdx]
+  const needRow = need[procIdx] || [];
+  for (let j = 0; j < reqVec.length; j++) {
+    if (reqVec[j] > (needRow[j] || 0)) {
+      resultEl.innerHTML = `<span class="request-result-unsafe">Request denied: amount requested (${reqVec[j]}) exceeds P${procIdx}'s declared maximum need (${needRow[j]||0}) for resource ${RES_LABELS[j]||j}.</span>`;
+      return;
+    }
+  }
+
+  // Step 2: Request <= Available
+  for (let j = 0; j < reqVec.length; j++) {
+    if (reqVec[j] > (avail[j] || 0)) {
+      resultEl.innerHTML = `<span class="request-result-unsafe">Process P${procIdx} must wait: requested ${reqVec[j]} of resource ${RES_LABELS[j]||j} but only ${avail[j]||0} available.</span>`;
+      return;
+    }
+  }
+
+  // Step 3: Tentatively allocate and check safety
+  const tmpAvail = [...avail];
+  const tmpAlloc = alloc.map(r=>[...r]);
+  const tmpNeed = need.map(r=>[...r]);
+  for (let j = 0; j < reqVec.length; j++) {
+    tmpAvail[j] -= (reqVec[j] || 0);
+    tmpAlloc[procIdx][j] += (reqVec[j] || 0);
+    tmpNeed[procIdx][j] -= (reqVec[j] || 0);
+  }
+
+  // Run safety check on tentative state
+  const work = [...tmpAvail];
+  const finish = new Array(nProcs).fill(false);
+  const safeSeq = [];
+  let progress = true;
+  while (progress) {
+    progress = false;
+    for (let i = 0; i < nProcs; i++) {
+      if (finish[i]) continue;
+      if (tmpNeed[i].every((n, r) => n <= work[r])) {
+        for (let r = 0; r < nRes; r++) work[r] += tmpAlloc[i][r];
+        finish[i] = true;
+        safeSeq.push(i);
+        progress = true;
+      }
+    }
+  }
+
+  if (finish.every(Boolean)) {
+    resultEl.innerHTML = `<span class="request-result-safe">Request can be safely granted — system remains in a safe state.</span><br>
+      <span style="font-size:.72rem;color:var(--muted)">Safe sequence after grant: P${safeSeq.join(' → P')}. The Banker's algorithm confirms a safe sequence still exists.</span>`;
+  } else {
+    const deadlocked = finish.map((f,i)=>f?null:`P${i}`).filter(x=>x!==null).join(', ');
+    resultEl.innerHTML = `<span class="request-result-unsafe">Request denied: granting this request would lead to an unsafe state. Processes ${deadlocked} cannot complete.</span>`;
+  }
+});
+
+// ── MOD 46: Detection mode ────────────────────────────────
+let dlMode = 'avoidance';
+
+document.getElementById('avoidanceMode').addEventListener('click', () => {
+  dlMode = 'avoidance';
+  document.getElementById('avoidanceMode').classList.add('active');
+  document.getElementById('detectionMode').classList.remove('active');
+  document.getElementById('modeSubtitle').textContent = 'Deadlock Avoidance';
+  document.getElementById('detectionPanel').style.display = 'none';
+  // Show normal controls
+  document.getElementById('runBtn').style.display = '';
+  document.getElementById('needArea').style.display = 'none';
+  document.getElementById('safetyArea').style.display = 'none';
+  document.getElementById('resultArea').style.display = 'none';
+  document.getElementById('metricsArea').style.display = 'none';
+});
+
+document.getElementById('detectionMode').addEventListener('click', () => {
+  dlMode = 'detection';
+  document.getElementById('detectionMode').classList.add('active');
+  document.getElementById('avoidanceMode').classList.remove('active');
+  document.getElementById('modeSubtitle').textContent = 'Deadlock Detection';
+  document.getElementById('detectionPanel').style.display = '';
+  document.getElementById('detectionResult').innerHTML = '';
+});
+
+document.getElementById('runDetectionBtn').addEventListener('click', () => {
+  const readMatrix = (id, rows, cols) => {
+    const tbl = document.getElementById(id);
+    const inputs = tbl.querySelectorAll('input');
+    const mat = [];
+    for (let i = 0; i < rows; i++) {
+      mat.push([]);
+      for (let j = 0; j < cols; j++) mat[i].push(parseInt(inputs[i*cols+j].value)||0);
+    }
+    return mat;
+  };
+  const readAvail = () => {
+    return Array.from(document.getElementById('availableInputs').querySelectorAll('input')).map(i=>parseInt(i.value)||0);
+  };
+
+  const alloc = readMatrix('allocTable', nProcs, nRes);
+  const avail = readAvail();
+
+  // Deadlock detection: find processes that can finish with available resources
+  const work = [...avail];
+  const finish = new Array(nProcs).fill(false);
+  // A process can finish if its allocation can be satisfied (i.e., all its allocations <= work)
+  // In pure detection: finish[i] = true if alloc[i] is all zeros (not holding resources)
+  // Standard algorithm: find P where finish[i]=false and alloc[i]<=work
+  let progress = true;
+  while (progress) {
+    progress = false;
+    for (let i = 0; i < nProcs; i++) {
+      if (finish[i]) continue;
+      if (alloc[i].every((v, r) => v <= work[r])) {
+        for (let r = 0; r < nRes; r++) work[r] += alloc[i][r];
+        finish[i] = true;
+        progress = true;
+      }
+    }
+  }
+
+  const resultEl = document.getElementById('detectionResult');
+  const deadlocked = finish.map((f,i)=>f?null:i).filter(x=>x!==null);
+  if (!deadlocked.length) {
+    resultEl.innerHTML = `<div class="safety-step safe" style="margin-top:6px">No deadlock detected — all processes can complete with available resources.</div>`;
+  } else {
+    const pList = deadlocked.map(i=>`P${i}`).join(', ');
+    resultEl.innerHTML = `<div class="safety-step unsafe" style="margin-top:6px">
+      Deadlock detected! The following processes are in a deadlock cycle: <strong>${pList}</strong>.<br>
+      <span style="font-size:.78rem;color:var(--muted)">These processes cannot complete even after all other processes release their resources.</span>
+    </div>
+    <div style="margin-top:8px;font-size:.78rem;color:var(--muted)">Recovery options: abort process(es) or preempt resources from deadlocked set.</div>`;
+  }
 });
 
 // Init

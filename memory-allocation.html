@@ -114,6 +114,40 @@
     .step-box.current { border-left-color: var(--accent); background: var(--blue-2); font-weight: 600; }
     [data-theme="dark"] .step-box.success { background: #0f2a1e; }
     [data-theme="dark"] .step-box.fail { background: #2a0e00; }
+
+    /* ─── MOD 47: Fragmentation formula ─────────────── */
+    .frag-formula-reveal {
+      font-size: .75rem; color: var(--accent); cursor: pointer;
+      text-decoration: underline; font-weight: 600;
+    }
+    .frag-formula-box {
+      display: none;
+      margin-top: 6px;
+      background: var(--blue-2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      font-size: .76rem;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+    .frag-formula-box.visible { display: block; }
+
+    /* ─── MOD 48: Next Fit rover ─────────────────────── */
+    .mem-block-row.next-fit-current { border-left: 3px solid var(--disk-color) !important; }
+    .next-fit-rover-label {
+      font-size: .65rem; color: var(--disk-color);
+      font-weight: 700; margin-left: 6px;
+      background: var(--disk-light);
+      padding: 1px 5px; border-radius: 3px;
+    }
+
+    /* ─── MOD 49: Compaction ─────────────────────────── */
+    .mem-block-row.compacting {
+      transition: all 0.8s ease;
+      transform: translateX(0);
+      opacity: 0.6;
+    }
   </style>
 </head>
 <body>
@@ -221,6 +255,18 @@
     <!-- Metrics -->
     <div id="metricsArea" style="display:none">
       <div class="metrics-grid" id="metricsGrid"></div>
+      <!-- MOD 47: Fragmentation formula -->
+      <div style="margin-top:6px">
+        <span class="frag-formula-reveal" id="fragFormulaToggle">How is fragmentation calculated?</span>
+        <div class="frag-formula-box" id="fragFormulaBox">
+          <strong>Internal fragmentation</strong> = allocated block size &minus; actual process size (wasted space inside a block)<br>
+          <strong>External fragmentation</strong> = total free memory &minus; largest contiguous free block (free space that can't be used)<br>
+          <strong>Formula:</strong> Frag% = (external_frag / total_memory) &times; 100
+        </div>
+      </div>
+      <!-- MOD 49: Compact button -->
+      <button class="btn btn-warning btn-sm" id="compactBtn" style="display:none;margin-top:8px">Compact Memory</button>
+      <div id="compactResult" style="display:none;margin-top:6px;font-size:.78rem"></div>
     </div>
 
     <!-- Step log -->
@@ -273,6 +319,7 @@ let currentStep = 0;
 let playing = false;
 let playInterval = null;
 let speedFactor = 1;
+let roverPosition = -1; // MOD 48: Next Fit rover position
 
 // ── Input Rendering ───────────────────────────────────────
 function renderHolesInput() {
@@ -365,17 +412,19 @@ function allocate(holesCopy, procsCopy, algo) {
         proc: pi, pSize, block: chosen, success: true,
         frag: fragBefore - pSize,
         msg: `P${pi+1} (${pSize}KB) → Block H${chosen+1} (${fragBefore}KB). Internal fragmentation: ${fragBefore - pSize}KB`,
-        blocks: blocks.map(b => ({...b}))
+        blocks: blocks.map(b => ({...b})),
+        nextPtr: algo === 'next' ? nextPtr : -1
       });
     } else {
       steps.push({
         proc: pi, pSize, block: -1, success: false,
         msg: `P${pi+1} (${pSize}KB) → No suitable block found!`,
-        blocks: blocks.map(b => ({...b}))
+        blocks: blocks.map(b => ({...b})),
+        nextPtr: algo === 'next' ? nextPtr : -1
       });
     }
   }
-  return { steps, blocks };
+  return { steps, blocks, finalNextPtr: nextPtr };
 }
 
 // ── Render Memory Map ─────────────────────────────────────
@@ -384,6 +433,9 @@ function renderMemMap(step) {
   if (!step) { wrapper.innerHTML = ''; return; }
 
   const totalMem = holes.reduce((s, h) => s + h, 0);
+  // MOD 48: rover position from step
+  const stepRover = (currentAlgo === 'next' && step.nextPtr !== undefined && step.nextPtr >= 0) ? step.nextPtr : roverPosition;
+
   const html = `
     <div class="mem-map-column">
       <div class="mem-map-title">Memory Blocks</div>
@@ -394,16 +446,21 @@ function renderMemMap(step) {
         const fillPct = origSize > 0 ? (usedSize / origSize * 100) : 0;
         const color = isAllocated ? PROC_COLORS[b.allocated % 8] : null;
         const height = Math.max(36, Math.round(origSize / totalMem * 400));
+        // MOD 48: rover indicator
+        const isRover = currentAlgo === 'next' && i === stepRover;
+        const roverLabel = isRover ? '<span class="next-fit-rover-label">rover</span>' : '';
 
         if (!isAllocated) {
-          return `<div class="mem-block-row free" style="min-height:${height}px">
+          return `<div class="mem-block-row free${isRover?' next-fit-current':''}" style="min-height:${height}px">
             <span class="mem-label">H${i+1} (Free)</span>
+            ${roverLabel}
             <div class="mem-size-bar"><div class="mem-size-fill" style="width:0%"></div></div>
             <span class="mem-size-text">${b.size}KB</span>
           </div>`;
         } else {
-          return `<div class="mem-block-row allocated" style="background:${color}; min-height:${height}px">
+          return `<div class="mem-block-row allocated${isRover?' next-fit-current':''}" style="background:${color}; min-height:${height}px">
             <span class="mem-label">P${b.allocated+1} in H${i+1}</span>
+            ${roverLabel}
             <div class="mem-size-bar"><div class="mem-size-fill" style="width:${fillPct}%"></div></div>
             <span class="mem-size-text">${usedSize}KB + ${b.size}KB free</span>
           </div>`;
@@ -477,6 +534,8 @@ document.getElementById('runBtn').addEventListener('click', () => {
   const result = allocate([...holes], [...procs], currentAlgo);
   allocSteps = result.steps;
   currentStep = allocSteps.length;
+  // MOD 48: track final rover position
+  roverPosition = result.finalNextPtr !== undefined ? result.finalNextPtr : -1;
 
   document.getElementById('mapCard').style.display = '';
   document.getElementById('algoLabel').textContent = ALGO_NAMES[currentAlgo];
@@ -491,19 +550,38 @@ document.getElementById('runBtn').addEventListener('click', () => {
   const totalMem = holes.reduce((s, h) => s + h, 0);
   const usedMem = procs.filter((_, i) => allocSteps.find(s => s.proc === i && s.success)).reduce((s, p) => s + p, 0);
 
+  // MOD 47: compute external fragmentation
+  const lastBlocks = result.blocks;
+  const freeHoles = lastBlocks.filter(b => b.allocated === null).map(b => b.size);
+  const totalFree = freeHoles.reduce((s, v) => s + v, 0);
+  const largestFree = freeHoles.length ? Math.max(...freeHoles) : 0;
+  const extFrag = totalFree - largestFree;
+  const extFragPct = totalMem > 0 ? ((extFrag / totalMem) * 100).toFixed(1) : 0;
+
   document.getElementById('metricsGrid').innerHTML = `
     <div class="metric-card"><div class="metric-value" style="color:var(--mem-color)">${allocated}/${procs.length}</div><div class="metric-label">Allocated</div></div>
     <div class="metric-card"><div class="metric-value" style="color:${failed>0?'var(--disk-color)':'var(--muted)'}">
       ${failed}</div><div class="metric-label">Unallocated</div></div>
     <div class="metric-card"><div class="metric-value">${totalFrag}KB</div><div class="metric-label">Int. Fragmentation</div></div>
     <div class="metric-card"><div class="metric-value">${((usedMem/totalMem)*100).toFixed(1)}%</div><div class="metric-label">Memory Util.</div></div>
+    <div class="metric-card"><div class="metric-value" style="color:var(--accent-3)">${extFrag}KB (${extFragPct}%)</div><div class="metric-label">Ext. Fragmentation</div></div>
   `;
 
   const badges = document.getElementById('mapBadges');
   badges.innerHTML = `
     <span class="badge badge-green">${allocated} allocated</span>
     ${failed > 0 ? `<span class="badge badge-red">${failed} failed</span>` : ''}
+    ${extFrag > 0 ? `<span class="badge badge-gold">${extFrag}KB ext. frag</span>` : ''}
   `;
+
+  // MOD 49: show compact button when external fragmentation exists
+  const compactBtn = document.getElementById('compactBtn');
+  compactBtn.style.display = extFrag > 0 ? '' : 'none';
+  compactBtn.textContent = 'Compact Memory';
+  compactBtn.disabled = false;
+  document.getElementById('compactResult').style.display = 'none';
+  // Store for compaction use
+  compactBtn.dataset.extFrag = extFrag;
 
   updateDisplay(currentStep);
 });
@@ -543,13 +621,58 @@ document.querySelectorAll('.speed-btn').forEach(btn => {
 });
 
 document.getElementById('resetBtn').addEventListener('click', () => {
-  stopPlay(); allocSteps = []; currentStep = 0;
+  stopPlay(); allocSteps = []; currentStep = 0; roverPosition = -1;
   document.getElementById('mapCard').style.display = 'none';
   document.getElementById('playbackBar').style.display = 'none';
   document.getElementById('metricsArea').style.display = 'none';
   document.getElementById('stepLogArea').style.display = 'none';
   document.getElementById('tableArea').style.display = 'none';
   document.getElementById('compareArea').style.display = 'none';
+  document.getElementById('compactBtn').style.display = 'none';
+  document.getElementById('compactResult').style.display = 'none';
+  // Reset formula toggle
+  const box = document.getElementById('fragFormulaBox');
+  if (box) box.classList.remove('visible');
+  const toggle = document.getElementById('fragFormulaToggle');
+  if (toggle) toggle.textContent = 'How is fragmentation calculated?';
+});
+
+// ── MOD 47: Fragmentation formula toggle ─────────────────
+document.getElementById('fragFormulaToggle').addEventListener('click', () => {
+  const box = document.getElementById('fragFormulaBox');
+  box.classList.toggle('visible');
+  document.getElementById('fragFormulaToggle').textContent =
+    box.classList.contains('visible') ? 'Hide formula' : 'How is fragmentation calculated?';
+});
+
+// ── MOD 49: Compaction ────────────────────────────────────
+document.getElementById('compactBtn').addEventListener('click', () => {
+  const extFrag = parseInt(document.getElementById('compactBtn').dataset.extFrag) || 0;
+  const blocks = document.querySelectorAll('.mem-block-row');
+  blocks.forEach(b => b.classList.add('compacting'));
+
+  const btn = document.getElementById('compactBtn');
+  btn.textContent = 'Compacting...';
+  btn.disabled = true;
+
+  setTimeout(() => {
+    blocks.forEach(b => b.classList.remove('compacting'));
+    const result = document.getElementById('compactResult');
+    result.style.display = '';
+    result.innerHTML = `
+      <strong>Compaction complete</strong> — external fragmentation eliminated.<br>
+      Before: <strong style="color:var(--disk-color)">${extFrag}KB</strong> fragmented free space &rarr;
+      After: <strong style="color:var(--mem-color)">0KB</strong> (all free space now contiguous).<br>
+      <span style="color:var(--muted)">Note: Compaction requires moving all live processes in memory — high overhead in real systems.</span>
+    `;
+    setTimeout(() => {
+      btn.textContent = 'Compact Memory';
+      btn.disabled = false;
+      // update the ext frag metric to 0 to show effect
+      document.getElementById('compactBtn').dataset.extFrag = '0';
+      btn.style.display = 'none';
+    }, 2000);
+  }, 800);
 });
 
 renderHolesInput();
