@@ -1285,3 +1285,223 @@ hr { border: none; border-top: 1px solid var(--line); }
     content:"OS Algorithm Lesson Report"; display:block; font-size:22px; font-weight:900; margin-bottom:12px;
   }
 }
+
+/* ============================================================
+   Enhancement Pack — 25 UI Features
+   ============================================================ */
+
+/* ── Feature 3: Floating Keyboard Shortcuts Panel ── */
+.shortcuts-fab {
+  position: fixed; right: 20px; top: 82px; z-index: 250;
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--accent); color: #fff;
+  border: 2px solid rgba(255,255,255,0.25);
+  font-size: 1rem; font-weight: 900; line-height: 1;
+  cursor: pointer; box-shadow: var(--shadow-md);
+  display: flex; align-items: center; justify-content: center;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.shortcuts-fab:hover { transform: scale(1.12); box-shadow: var(--shadow-lg); }
+
+.shortcuts-modal {
+  position: fixed; right: 64px; top: 72px; z-index: 260;
+  width: 310px; max-height: calc(100vh - 96px); overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
+  padding: 16px; animation: fadeIn 0.18s ease;
+}
+[data-theme="dark"] .shortcuts-modal { background: #172434; }
+
+.shortcuts-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--line);
+}
+.shortcuts-header strong { font-size: 0.9rem; color: var(--ink); }
+.shortcuts-header button {
+  background: none; border: none; font-size: 1.3rem;
+  cursor: pointer; color: var(--muted); padding: 0 4px; line-height: 1;
+}
+.shortcuts-list { display: flex; flex-direction: column; gap: 7px; }
+.shortcut-row { display: flex; align-items: center; gap: 10px; font-size: 0.82rem; }
+.shortcut-row span { color: var(--ink); }
+.shortcut-row kbd {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 2px 7px; min-width: 52px; flex-shrink: 0;
+  background: var(--blue-1); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); font-family: monospace;
+  font-size: 0.72rem; font-weight: 700; white-space: nowrap;
+  box-shadow: 0 2px 0 var(--line); color: var(--ink);
+}
+
+/* ── Feature 5: Module Progress Checklist ── */
+.module-checklist { display: flex; flex-direction: column; gap: 5px; }
+.checklist-item {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 0.78rem; font-weight: 600; color: var(--ink);
+}
+.checklist-item small { color: var(--muted); font-weight: 500; margin-left: auto; }
+.checklist-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+  border: 2px solid var(--line); background: transparent;
+  transition: background 0.25s, border-color 0.25s;
+}
+.checklist-dot.done { background: var(--mem-color); border-color: var(--mem-color); }
+
+/* ── Feature 9: Gantt Zoom & Pan ── */
+.gantt-wrap[data-zoom-init] { position: relative; }
+.gantt-zoom-hint {
+  position: absolute; top: 5px; right: 8px;
+  font-size: 0.62rem; color: var(--muted); font-weight: 600;
+  pointer-events: none; opacity: 0.65; white-space: nowrap;
+}
+
+/* ── Feature 16: Metrics Comparison Bar Chart ── */
+.metrics-chart-panel {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); padding: var(--space-4);
+  box-shadow: var(--shadow-sm);
+}
+[data-theme="dark"] .metrics-chart-panel { background: #172434; }
+.chart-empty-msg { color: var(--muted); font-size: 0.8rem; }
+.chart-metric-group { margin-bottom: 14px; }
+.chart-metric-group:last-child { margin-bottom: 0; }
+.chart-metric-label {
+  font-size: 0.68rem; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--muted); margin-bottom: 6px;
+}
+.chart-bar-row {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 4px;
+}
+.chart-algo-name {
+  width: 90px; flex-shrink: 0; font-size: 0.75rem; font-weight: 600;
+  color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.chart-bar-track {
+  flex: 1; height: 14px; background: var(--blue-1);
+  border-radius: 3px; overflow: hidden; border: 1px solid var(--line);
+}
+.chart-bar-fill {
+  height: 100%; min-width: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--blue-3));
+  border-radius: 3px; transition: width 0.5s ease;
+}
+.chart-bar-val {
+  width: 40px; flex-shrink: 0; text-align: right;
+  font-size: 0.74rem; font-weight: 700; color: var(--ink);
+}
+
+/* ── Feature 19: Algorithm Complexity Badges ── */
+.complexity-badge {
+  display: inline-block; margin-left: 5px;
+  padding: 1px 5px; border-radius: 8px;
+  background: var(--blue-2); color: var(--blue-5);
+  border: 1px solid var(--blue-3);
+  font-size: 0.6rem; font-weight: 700;
+  vertical-align: middle; line-height: 1.5;
+  pointer-events: none;
+}
+.algo-tab.active .complexity-badge,
+.algo-option.selected .complexity-badge {
+  background: rgba(255,255,255,0.22);
+  color: #fff;
+  border-color: rgba(255,255,255,0.38);
+}
+
+/* ── Feature 20: Trace Mode Annotations ── */
+.trace-annotation {
+  position: absolute; top: 0; right: 0; z-index: 20;
+  background: var(--accent-2); color: #fff;
+  font-size: 0.55rem; font-weight: 900; letter-spacing: 0.06em;
+  padding: 1px 5px; border-radius: 0 var(--radius-sm) 0 var(--radius-sm);
+  pointer-events: none; animation: pulse 0.9s ease-in-out infinite;
+}
+body.trace-mode .step-entry.current {
+  outline: 2px solid var(--accent-2); outline-offset: 2px;
+}
+body.trace-mode .frame-cell.fault,
+body.trace-mode .page-slot.fault,
+body.trace-mode .ref-token.current {
+  outline: 2px solid var(--accent-2); outline-offset: 2px;
+}
+
+/* ── Feature 15: Drag-to-Reorder Table Rows ── */
+.drag-handle {
+  cursor: grab !important; text-align: center;
+  color: var(--muted); font-size: 1rem; user-select: none;
+  width: 22px !important; padding: 0 3px !important; opacity: 0.45;
+}
+.drag-handle:hover { opacity: 1; color: var(--accent); cursor: grab; }
+.drag-handle-th { width: 22px !important; padding: 0 !important; }
+tr.dragging { opacity: 0.4; }
+tr.drag-over { box-shadow: 0 -2px 0 0 var(--accent) inset; }
+
+/* ── Feature 21: High-Contrast Theme ── */
+[data-theme="high-contrast"] {
+  --ink: #000000;
+  --muted: #333333;
+  --surface: #ffffff;
+  --panel: #ffffff;
+  --line: #000000;
+  --accent: #0000cc;
+  --accent-2: #cc0000;
+  --accent-3: #886600;
+  --blue-1: #f0f0ff;
+  --blue-2: #ccccff;
+  --blue-3: #6666cc;
+  --blue-4: #0000cc;
+  --blue-5: #000077;
+  --cpu-color: #0000cc;     --cpu-light: #ddddff;
+  --mem-color: #006600;     --mem-light: #ccffcc;
+  --disk-color: #cc0000;    --disk-light: #ffdddd;
+  --deadlock-color: #660066;--deadlock-light: #ffccff;
+  --alloc-color: #006666;   --alloc-light: #ccffff;
+  --process-color: #440044; --process-light: #ffccff;
+  --shadow-sm: 0 0 0 1px #000;
+  --shadow-md: 0 0 0 2px #000;
+  --shadow-lg: 0 0 0 3px #000;
+}
+[data-theme="high-contrast"] .top-nav {
+  background: #fff !important; border-bottom: 3px solid #000 !important;
+}
+[data-theme="high-contrast"] .global-sidebar {
+  background: #fff !important; border-right: 3px solid #000 !important;
+}
+[data-theme="high-contrast"] input,
+[data-theme="high-contrast"] select,
+[data-theme="high-contrast"] textarea {
+  border: 2px solid #000 !important; background: #fff !important; color: #000 !important;
+}
+[data-theme="high-contrast"] .card {
+  border: 2px solid #000 !important; background: #fff !important;
+}
+[data-theme="high-contrast"] .btn { border-width: 2px !important; }
+[data-theme="high-contrast"] .btn-primary { background: #0000cc !important; }
+[data-theme="high-contrast"] .algo-card { border: 2px solid #000 !important; }
+[data-theme="high-contrast"] .tag { border-width: 2px !important; font-weight: 800 !important; }
+[data-theme="high-contrast"] .global-timeline {
+  background: #fff !important; border: 3px solid #000 !important;
+}
+[data-theme="high-contrast"] .badge-blue,
+[data-theme="high-contrast"] .badge-green,
+[data-theme="high-contrast"] .badge-red,
+[data-theme="high-contrast"] .badge-purple,
+[data-theme="high-contrast"] .badge-teal,
+[data-theme="high-contrast"] .badge-gold {
+  border: 2px solid currentColor !important;
+}
+
+/* ── Feature 25: Restored-input flash ── */
+@keyframes restored-flash {
+  0%   { box-shadow: 0 0 0 3px rgba(22,115,199,0.55); }
+  100% { box-shadow: none; }
+}
+.restored-input { animation: restored-flash 0.9s ease; }
+
+/* ── Responsive adjustments for new elements ── */
+@media (max-width: 900px) {
+  .shortcuts-fab { top: auto; bottom: 64px; right: 14px; }
+  .shortcuts-modal { right: 14px; left: 14px; width: auto; top: auto; bottom: 106px; }
+}
+@media print {
+  .shortcuts-fab, .shortcuts-modal, .metrics-chart-panel { display: none !important; }
+}
